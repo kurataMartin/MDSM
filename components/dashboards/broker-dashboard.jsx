@@ -193,17 +193,21 @@ export default function BrokerDashboard({ user, onLogout }) {
 
   useAutoRefresh(refreshData, 15_000);
 
-  const handleExecuteOrder = useCallback(async (orderId) => {
+  const handleExecuteOrder = useCallback(async (orderId, callbacks) => {
     try {
       const res = await executeOrder(orderId, user.id);
-      if (!res?.success) throw new Error(res?.message || "Execution failed");
+      if (!res?.success) {
+        callbacks?.onError(res?.message || "Execution failed");
+        return;
+      }
       setClientOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: "filled" } : o))
       );
-      setTimeout(() => refreshData(true), 1200);
+      callbacks?.onSuccess(res);
+      setTimeout(() => refreshData(true), 2000);
     } catch (err) {
       console.error("Execute failed:", err);
-      alert(`Failed to execute order #${orderId}\n${err.message}`);
+      callbacks?.onError(err.message || "Execution failed");
     }
   }, [user.id, refreshData]);
 
@@ -496,46 +500,58 @@ function KpiCard({ label, value, accent = "emerald", icon: Icon }) {
 // ORDER EXECUTION — Client Orders
 // ──────────────────────────────────────────────────────────────
 
-function OrderExecutionTimer({ orderId }) {
+// Sub-component so useExecutionTimer is called at the top level of a component
+function ExecutionProgress() {
   const { progress, remaining, phase } = useExecutionTimer(true);
-  const pct = Math.round(progress * 100);
   return (
-    <div className="mt-2 w-full space-y-1">
-      {/* Progress bar */}
-      <div className="h-1.5 w-full rounded-full bg-slate-700/80 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {/* Phase label + countdown */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] text-slate-400 truncate">{phase}</span>
-        <span className="text-[10px] font-mono text-emerald-400 shrink-0 flex items-center gap-1">
-          <Clock className="h-2.5 w-2.5" />
-          ~{remaining}s
+    <div className="rounded-lg bg-emerald-950/40 border border-emerald-500/20 p-3 space-y-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="flex items-center gap-1.5 text-emerald-300">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+          </span>
+          {phase}
+        </span>
+        <span className="font-mono text-emerald-400 flex items-center gap-1">
+          <Clock className="h-3 w-3" /> ~{remaining}s remaining
         </span>
       </div>
+      <div className="h-1.5 w-full rounded-full bg-slate-700/60 overflow-hidden">
+        <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-300"
+          style={{ width: `${Math.round(progress * 100)}%` }} />
+      </div>
+      <p className="text-[10px] text-slate-500 text-center">
+        Blockchain confirmation in progress — do not close this page
+      </p>
     </div>
   );
 }
 
 function ClientOrders({ clientOrders, onExecute }) {
-  const [filter, setFilter] = useState("pending");
-  const [executingIds, setExecutingIds] = useState(new Set());
+  const [filter, setFilter]       = useState("pending");
+  // Map of orderId → { state: 'executing'|'success'|'error', message? }
+  const [orderStates, setOrderStates] = useState({});
+
+  const setOrderState = useCallback((id, state, message = null) => {
+    setOrderStates((prev) => ({ ...prev, [id]: { state, message } }));
+  }, []);
 
   const handleExecute = useCallback(async (orderId) => {
-    setExecutingIds((prev) => new Set(prev).add(orderId));
-    try {
-      await onExecute(orderId);
-    } finally {
-      setExecutingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
-      });
-    }
-  }, [onExecute]);
+    setOrderState(orderId, "executing");
+    await onExecute(orderId, {
+      onSuccess: (res) => {
+        setOrderState(orderId, "success",
+          `Filled — ${res.quantity ?? ""} ${res.symbol ?? ""} @ M${fmt2(res.price ?? 0)}`
+        );
+        // Auto-clear success after 6 s
+        setTimeout(() => setOrderStates((p) => { const n = {...p}; delete n[orderId]; return n; }), 6000);
+      },
+      onError: (msg) => {
+        setOrderState(orderId, "error", msg);
+      },
+    });
+  }, [onExecute, setOrderState]);
 
   const filtered = filter === "all"
     ? clientOrders
@@ -570,70 +586,105 @@ function ClientOrders({ clientOrders, onExecute }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((order, idx) => (
+          {filtered.map((order, idx) => {
+            const os = orderStates[order.id];
+            const isExecuting = os?.state === "executing";
+            const isSuccess   = os?.state === "success";
+            const isError     = os?.state === "error";
+
+            return (
             <div key={order.id ?? idx}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-white/[0.06] bg-slate-900/60 hover:border-white/[0.10] transition-all">
-              {/* Left info */}
-              <div className="flex items-start gap-3 flex-1 min-w-0">
-                <div className={`mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0
-                  ${order.side === "BUY" ? "bg-emerald-500/15" : "bg-red-500/15"}`}>
-                  {order.side === "BUY"
-                    ? <TrendingUp className="h-4 w-4 text-emerald-400" />
-                    : <TrendingDown className="h-4 w-4 text-red-400" />}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded
-                      ${order.side === "BUY" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
-                      {order.side}
-                    </span>
-                    <span className="font-mono font-bold text-white">{order.symbol}</span>
-                    <span className="text-slate-400 text-sm">× {fmtN(order.quantity)}</span>
+              className={`flex flex-col gap-3 p-4 rounded-xl border transition-all
+                ${isExecuting ? "border-emerald-500/40 bg-emerald-950/20"
+                : isSuccess   ? "border-emerald-500/30 bg-emerald-950/10"
+                : isError     ? "border-red-500/30 bg-red-950/10"
+                : "border-white/[0.06] bg-slate-900/60 hover:border-white/[0.10]"}`}>
+
+              {/* Order row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                {/* Left info */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className={`mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0
+                    ${order.side === "BUY" ? "bg-emerald-500/15" : "bg-red-500/15"}`}>
+                    {order.side === "BUY"
+                      ? <TrendingUp className="h-4 w-4 text-emerald-400" />
+                      : <TrendingDown className="h-4 w-4 text-red-400" />}
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Client: <span className="text-slate-300">{order.clientName}</span>
-                    {order.clientEmail && <span className="ml-1 opacity-60">({order.clientEmail})</span>}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Price: <span className="font-mono text-slate-300">M{fmt2(order.price)}</span>
-                    <span className="mx-2 opacity-40">·</span>
-                    Total: <span className="font-mono text-white font-semibold">M{fmt2(order.total)}</span>
-                  </p>
-                  <p className="text-[11px] text-slate-600 mt-0.5">{fmtDate(order.created_at)}</p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded
+                        ${order.side === "BUY" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+                        {order.side}
+                      </span>
+                      <span className="font-mono font-bold text-white">{order.symbol}</span>
+                      <span className="text-slate-400 text-sm">× {fmtN(order.quantity)}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Client: <span className="text-slate-300">{order.clientName}</span>
+                      {order.clientEmail && <span className="ml-1 opacity-60">({order.clientEmail})</span>}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Price: <span className="font-mono text-slate-300">M{fmt2(order.price)}</span>
+                      <span className="mx-2 opacity-40">·</span>
+                      Total: <span className="font-mono text-white font-semibold">M{fmt2(order.total)}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-600 mt-0.5">{fmtDate(order.created_at)}</p>
+                  </div>
                 </div>
-              </div>
-              {/* Right — status + action */}
-              <div className="flex flex-col items-end gap-1 flex-shrink-0 min-w-[130px]">
-                <div className="flex items-center gap-3">
+
+                {/* Right — status + action */}
+                <div className="flex items-center gap-3 flex-shrink-0">
                   <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider
-                    ${order.status === "filled"   ? "bg-emerald-500/15 text-emerald-400"
-                    : order.status === "pending"  ? "bg-amber-500/15 text-amber-400"
-                    : order.status === "rejected" ? "bg-red-500/15 text-red-400"
+                    ${isSuccess || order.status === "filled"   ? "bg-emerald-500/15 text-emerald-400"
+                    : isError                                  ? "bg-red-500/15 text-red-400"
+                    : isExecuting                              ? "bg-emerald-500/10 text-emerald-500 animate-pulse"
+                    : order.status === "pending"               ? "bg-amber-500/15 text-amber-400"
+                    : order.status === "rejected"              ? "bg-red-500/15 text-red-400"
                     : "bg-slate-700 text-slate-400"}`}>
-                    {order.status}
+                    {isExecuting ? "Executing…" : isSuccess ? "Filled ✓" : isError ? "Failed" : order.status}
                   </span>
-                  {order.status === "pending" && (
-                    <Button
-                      size="sm"
-                      disabled={executingIds.has(order.id)}
-                      onClick={() => handleExecute(order.id)}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white h-8 px-3 text-xs gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {executingIds.has(order.id) ? (
-                        <><Loader2 className="h-3 w-3 animate-spin" /> Executing…</>
-                      ) : (
-                        <><Play className="h-3 w-3" /> Execute</>
-                      )}
+                  {order.status === "pending" && !isExecuting && !isSuccess && !isError && (
+                    <Button size="sm" onClick={() => handleExecute(order.id)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white h-8 px-3 text-xs gap-1.5">
+                      <Play className="h-3 w-3" /> Execute
+                    </Button>
+                  )}
+                  {isExecuting && (
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                  )}
+                  {isError && (
+                    <Button size="sm" onClick={() => { setOrderStates((p) => { const n={...p}; delete n[order.id]; return n; }); }}
+                      className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/20 h-8 px-3 text-xs">
+                      Retry
                     </Button>
                   )}
                 </div>
-                {/* Per-order countdown timer */}
-                {executingIds.has(order.id) && (
-                  <OrderExecutionTimer orderId={order.id} />
-                )}
               </div>
+
+              {/* Execution progress panel */}
+              {isExecuting && <ExecutionProgress />}
+
+              {/* Success banner */}
+              {isSuccess && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <span className="text-xs text-emerald-300 font-medium">{os.message}</span>
+                </div>
+              )}
+
+              {/* Error banner */}
+              {isError && (
+                <div className="flex items-start gap-2 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
+                  <CircleAlert className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-red-300 font-semibold">Execution failed</p>
+                    <p className="text-[11px] text-red-400/80 mt-0.5 break-words">{os.message}</p>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
