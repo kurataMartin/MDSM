@@ -21,10 +21,22 @@ export default function App() {
   const [page, setPage] = useState("landing");
   const [user, setUser] = useState(null);
 
-  // Rehydrate session from localStorage on mount
+  // Rehydrate session on mount — but ONLY within the same browser session.
+  // sessionStorage is cleared when the tab/window is closed, so a fresh start
+  // (reopening the site after closing the tab) always lands on the landing page,
+  // even though localStorage still holds the user for re-login convenience.
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
+      const isSameSession = sessionStorage.getItem("mdsm_active_session") === "true";
+
+      if (!isSameSession) {
+        // Fresh start — mark the session active and stay on the landing page.
+        sessionStorage.setItem("mdsm_active_session", "true");
+        return;
+      }
+
+      // Same session (in-app navigation/reload) — restore the dashboard.
       const stored = localStorage.getItem("user");
       if (stored) {
         const u = JSON.parse(stored);
