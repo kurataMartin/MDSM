@@ -52,6 +52,38 @@ import {
 
 const BROKER_FEE_RATE = 0.05; // 5% per transaction
 
+// ── Execution timer ────────────────────────────────────────────
+// Total estimated time to complete a trade (DB + blockchain confirmation).
+// QBFT block period = 20 s; we budget for up to 1.5 blocks + overhead.
+const EXEC_ESTIMATE_MS = 30_000;
+
+const EXEC_PHASES = [
+  { until: 0.10, label: "Validating order & checking balances…" },
+  { until: 0.28, label: "Submitting transaction to blockchain…"  },
+  { until: 0.90, label: "Awaiting block confirmation…"           },
+  { until: 1.00, label: "Finalising & updating records…"         },
+];
+
+/**
+ * Returns { elapsed, progress, remaining, phase } while `active` is true.
+ * Resets to zero when `active` becomes false.
+ */
+function useExecutionTimer(active) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!active) { setElapsed(0); return; }
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Date.now() - start), 200);
+    return () => clearInterval(id);
+  }, [active]);
+
+  const progress  = Math.min(elapsed / EXEC_ESTIMATE_MS, 0.99);
+  const remaining = Math.max(0, Math.ceil((EXEC_ESTIMATE_MS - elapsed) / 1000));
+  const phase     = EXEC_PHASES.find((p) => progress <= p.until) ?? EXEC_PHASES.at(-1);
+  return { elapsed, progress, remaining, phase: phase.label };
+}
+
 const NAV_ITEMS = [
   { id: "overview",    label: "Overview",         icon: LayoutDashboard },
   { id: "clients",     label: "Order Execution",  icon: ShoppingCart },
@@ -467,6 +499,30 @@ function KpiCard({ label, value, accent = "emerald", icon: Icon }) {
 // ORDER EXECUTION — Client Orders
 // ──────────────────────────────────────────────────────────────
 
+function OrderExecutionTimer({ orderId }) {
+  const { progress, remaining, phase } = useExecutionTimer(true);
+  const pct = Math.round(progress * 100);
+  return (
+    <div className="mt-2 w-full space-y-1">
+      {/* Progress bar */}
+      <div className="h-1.5 w-full rounded-full bg-slate-700/80 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {/* Phase label + countdown */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-slate-400 truncate">{phase}</span>
+        <span className="text-[10px] font-mono text-emerald-400 shrink-0 flex items-center gap-1">
+          <Clock className="h-2.5 w-2.5" />
+          ~{remaining}s
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ClientOrders({ clientOrders, onExecute }) {
   const [filter, setFilter] = useState("pending");
   const [executingIds, setExecutingIds] = useState(new Set());
@@ -550,27 +606,33 @@ function ClientOrders({ clientOrders, onExecute }) {
                 </div>
               </div>
               {/* Right — status + action */}
-              <div className="flex items-center gap-3 flex-shrink-0">
-                <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider
-                  ${order.status === "filled"   ? "bg-emerald-500/15 text-emerald-400"
-                  : order.status === "pending"  ? "bg-amber-500/15 text-amber-400"
-                  : order.status === "rejected" ? "bg-red-500/15 text-red-400"
-                  : "bg-slate-700 text-slate-400"}`}>
-                  {order.status}
-                </span>
-                {order.status === "pending" && (
-                  <Button
-                    size="sm"
-                    disabled={executingIds.has(order.id)}
-                    onClick={() => handleExecute(order.id)}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white h-8 px-3 text-xs gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {executingIds.has(order.id) ? (
-                      <><Loader2 className="h-3 w-3 animate-spin" /> Executing…</>
-                    ) : (
-                      <><Play className="h-3 w-3" /> Execute</>
-                    )}
-                  </Button>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0 min-w-[130px]">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider
+                    ${order.status === "filled"   ? "bg-emerald-500/15 text-emerald-400"
+                    : order.status === "pending"  ? "bg-amber-500/15 text-amber-400"
+                    : order.status === "rejected" ? "bg-red-500/15 text-red-400"
+                    : "bg-slate-700 text-slate-400"}`}>
+                    {order.status}
+                  </span>
+                  {order.status === "pending" && (
+                    <Button
+                      size="sm"
+                      disabled={executingIds.has(order.id)}
+                      onClick={() => handleExecute(order.id)}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white h-8 px-3 text-xs gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {executingIds.has(order.id) ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" /> Executing…</>
+                      ) : (
+                        <><Play className="h-3 w-3" /> Execute</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {/* Per-order countdown timer */}
+                {executingIds.has(order.id) && (
+                  <OrderExecutionTimer orderId={order.id} />
                 )}
               </div>
             </div>
@@ -589,6 +651,7 @@ function ExecuteTrade({ securities, investors, brokerId, onOrderSubmitted }) {
   const [form, setForm] = useState({ clientId: "", securityId: "", side: "buy", quantity: "" });
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const timer = useExecutionTimer(loading);
 
   useEffect(() => {
     if (securities.length > 0 && !form.securityId) {
@@ -729,6 +792,62 @@ function ExecuteTrade({ securities, investors, brokerId, onOrderSubmitted }) {
             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5">
             {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Executing…</> : "Execute Order for Client"}
           </Button>
+
+          {/* Execution progress panel */}
+          {loading && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-300 uppercase tracking-wider">
+                    Executing on-chain
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 font-mono text-sm font-bold text-emerald-400">
+                  <Clock className="h-3.5 w-3.5" />
+                  ~{timer.remaining}s
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-2 w-full rounded-full bg-slate-700/80 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-300"
+                  style={{ width: `${Math.round(timer.progress * 100)}%` }}
+                />
+              </div>
+
+              {/* Phase label */}
+              <p className="text-[11px] text-slate-400">{timer.phase}</p>
+
+              {/* Phase steps */}
+              <div className="grid grid-cols-4 gap-1 pt-1">
+                {[
+                  { label: "Validate",  pct: 0.10 },
+                  { label: "Submit",    pct: 0.28 },
+                  { label: "Confirm",   pct: 0.90 },
+                  { label: "Finalise",  pct: 1.00 },
+                ].map((step) => (
+                  <div key={step.label} className="flex flex-col items-center gap-1">
+                    <div className={`h-1.5 w-full rounded-full transition-colors duration-500
+                      ${timer.progress >= step.pct ? "bg-emerald-500" : "bg-slate-700"}`} />
+                    <span className={`text-[9px] font-medium transition-colors duration-500
+                      ${timer.progress >= step.pct ? "text-emerald-400" : "text-slate-600"}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-slate-600 text-center">
+                Blockchain confirmation may take up to 60 s — do not close this page.
+              </p>
+            </div>
+          )}
         </form>
 
         {feedback && (
