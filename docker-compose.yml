@@ -48,9 +48,10 @@ services:
       SUPABASE_SERVICE_ROLE_KEY:     ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_KYC_BUCKET:           ${SUPABASE_KYC_BUCKET}
       # ── Blockchain ────────────────────────────────────────────────────────
-      # Use the container IP of besu-node1 (not 127.0.0.1 — that's the host
-      # loopback, which is unreachable from inside another Docker container).
-      BLOCKCHAIN_RPC_URL:    http://172.20.0.2:8545
+      # Docker local: use container IP (172.20.0.2) for in-network traffic.
+      # Vercel / external: set BLOCKCHAIN_RPC_URL to the Oracle Cloud public IP
+      #   e.g. http://<oracle-public-ip>:8545
+      BLOCKCHAIN_RPC_URL:    ${BLOCKCHAIN_RPC_URL:-http://172.20.0.2:8545}
       BLOCKCHAIN_CHAIN_ID:   "1337"
       BACKEND_PRIVATE_KEY:   ${BACKEND_PRIVATE_KEY}
       TRADE_REGISTRY_ADDRESS: ${TRADE_REGISTRY_ADDRESS}
