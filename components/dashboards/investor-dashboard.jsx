@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import DashboardShell from "@/components/dashboard-shell";
+import { useAutoRefresh } from "@/lib/hooks/useAutoRefresh";
 import MarketView from "@/components/investor/market-view";
 import TradingPanel from "@/components/investor/trading-panel";
 import PortfolioView from "@/components/investor/portfolio-view";
@@ -150,13 +151,7 @@ export default function InvestorDashboard({ user, onLogout }) {
     }
   }, [user?.id]);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    refreshFullDashboard();
-
-    const interval = setInterval(() => refreshFullDashboard(true), 45000);
-    return () => clearInterval(interval);
-  }, [refreshFullDashboard, user?.id]);
+  useAutoRefresh(refreshFullDashboard, 15_000);
 
   // ── Derived stats (now mostly from backend) ─────────────────────────────
   const dashboardStats = useMemo(() => ({

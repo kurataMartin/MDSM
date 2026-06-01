@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import DashboardShell from "@/components/dashboard-shell";
+import { useAutoRefresh } from "@/lib/hooks/useAutoRefresh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,11 +115,7 @@ export default function IssuerDashboard({ user, onLogout }) {
     }
   }, [user?.id]);
 
-  useEffect(() => {
-    refreshData(false);
-    const interval = setInterval(() => refreshData(true), 30000); // silent every 30s
-    return () => clearInterval(interval);
-  }, [refreshData]);
+  useAutoRefresh(refreshData, 15_000);
 
   const handleNewListingSuccess = useCallback(() => {
     refreshData(false);

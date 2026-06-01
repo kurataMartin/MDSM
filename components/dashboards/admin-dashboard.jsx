@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -23,6 +23,7 @@ import {
   Copy,
 } from "lucide-react";
 import DashboardShell from "@/components/dashboard-shell";
+import { useAutoRefresh } from "@/lib/hooks/useAutoRefresh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,7 +102,8 @@ export default function AdminDashboard({ user, onLogout }) {
   const [trades, setTrades] = useState([]);
   const [alerts, setAlerts] = useState([]);
 
-  async function refreshData() {
+  // useAutoRefresh passes a `silent` boolean — admin's refreshData ignores it (no loading spinner on poll)
+  const refreshData = useCallback(async (_silent = false) => {
     try {
       const [
         usersRaw,
@@ -138,13 +140,9 @@ export default function AdminDashboard({ user, onLogout }) {
     } catch (err) {
       console.error("Dashboard refresh failed:", err);
     }
-  }
+  }, [user?.id]);
 
-  useEffect(() => {
-    refreshData();
-    const interval = setInterval(refreshData, 20000);
-    return () => clearInterval(interval);
-  }, [user.id]);
+  useAutoRefresh(refreshData, 15_000);
 
   function renderContent() {
     switch (activeTab) {

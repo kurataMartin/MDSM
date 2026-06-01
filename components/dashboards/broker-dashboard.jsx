@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 
 import DashboardShell from "@/components/dashboard-shell";
+import { useAutoRefresh } from "@/lib/hooks/useAutoRefresh";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -190,11 +191,7 @@ export default function BrokerDashboard({ user, onLogout }) {
     }
   }, [user?.id, stats]);
 
-  useEffect(() => {
-    refreshData(false);
-    const interval = setInterval(() => refreshData(true), 20000);
-    return () => clearInterval(interval);
-  }, [refreshData]);
+  useAutoRefresh(refreshData, 15_000);
 
   const handleExecuteOrder = useCallback(async (orderId) => {
     try {
