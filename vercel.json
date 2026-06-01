@@ -1,9 +1,3 @@
 {
-  "regions": ["arn1"],
-  "crons": [
-    {
-      "path": "/api/health",
-      "schedule": "0 */6 * * *"
-    }
-  ]
+  "regions": ["arn1"]
 }
