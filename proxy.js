@@ -64,11 +64,16 @@ export default function proxy(request) {
     }
 
     // Admin and regulator are system roles — exempt from KYC requirement.
+    // Users may reach their dashboard once KYC is at least SUBMITTED (they see
+    // an "under review" banner; full trading stays gated until 'approved').
+    // Only users who have not submitted yet (pending / rejected / none) are
+    // sent to the KYC form.
     const kycExemptRoles = ['admin', 'regulator'];
+    const kycCleared = user.kyc_status === 'approved' || user.kyc_status === 'submitted';
     if (
       pathname.startsWith('/dashboards') &&
       !kycExemptRoles.includes(user.role) &&
-      user.kyc_status !== 'approved'
+      !kycCleared
     ) {
       return NextResponse.redirect(new URL('/kyc', request.url));
     }

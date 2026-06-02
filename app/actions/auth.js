@@ -454,10 +454,30 @@ export async function submitKYC(formData) {
       );
     }
 
+    // Update the session cookie so the middleware allows the user into their
+    // dashboard (kyc_status 'submitted' is permitted; full trading still gated
+    // until an admin approves).
+    try {
+      const cookieStore = await cookies();
+      const raw = cookieStore.get('user_session')?.value;
+      const sess = raw ? JSON.parse(raw) : { id: userId, role };
+      sess.kyc_status = 'submitted';
+      cookieStore.set('user_session', JSON.stringify(sess), {
+        httpOnly: true,
+        secure:   process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge:   60 * 60 * 24 * 7,
+        path:     '/',
+      });
+    } catch (e) {
+      console.warn('[KYC] Could not update session cookie:', e.message);
+    }
+
     return {
       success: true,
       message: `KYC submitted successfully with ${savedCount} document(s)`,
       kycId,
+      kyc_status: 'submitted',
     };
   } catch (err) {
     console.error("[KYC ERROR]", err);
