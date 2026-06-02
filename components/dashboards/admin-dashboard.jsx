@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, Component } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -92,6 +92,31 @@ const NAV_ITEMS = [
   { id: "add-user", label: "Add User", icon: UserPlus },
 ];
 
+// Catches data-driven render errors in any tab so one bad record never
+// white-screens the whole admin dashboard.
+class TabErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, msg: "" }; }
+  static getDerivedStateFromError(err) { return { hasError: true, msg: err?.message || "Render error" }; }
+  componentDidCatch(err, info) { console.error("[AdminDashboard] Tab render error:", err, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-8 text-center">
+          <p className="text-sm font-semibold text-red-400">This section could not be displayed</p>
+          <p className="mt-1 text-xs text-muted-foreground">{this.state.msg}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, msg: "" })}
+            className="mt-4 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function AdminDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [users, setUsers] = useState([]);
@@ -174,7 +199,9 @@ export default function AdminDashboard({ user, onLogout }) {
       onTabChange={setActiveTab}
       alerts={alerts}
     >
-      {renderContent()}
+      <TabErrorBoundary key={activeTab}>
+        {renderContent()}
+      </TabErrorBoundary>
     </DashboardShell>
   );
 }
@@ -1217,7 +1244,7 @@ function AuditLogView({ auditLog, users }) {
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-foreground">
-                      {actor?.name || entry.actor_id || "System / Unknown"}
+                      {actor?.name || entry.actor || (entry.actor_id ? `User #${entry.actor_id}` : "System")}
                     </td>
                     <td className="px-4 py-3 text-foreground">
                       {entry.details || "No details recorded"}
@@ -1616,6 +1643,8 @@ function BlockchainRecordsView({ securities }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiedHash, setCopiedHash] = useState(null);
+  const [error, setError] = useState(null);
+  const securityList = Array.isArray(securities) ? securities : [];
 
   useEffect(() => {
     fetchRecords();
@@ -1624,12 +1653,16 @@ function BlockchainRecordsView({ securities }) {
   async function fetchRecords() {
     try {
       const res = await fetch("/api/blockchain-records");
-      const data = await res.json();
-      if (data.success) {
-        setRecords(data.records || []);
+      const data = await res.json().catch(() => ({}));
+      if (data && data.success && Array.isArray(data.records)) {
+        setRecords(data.records);
+      } else {
+        setRecords([]);
+        if (data && data.error) setError(String(data.error));
       }
     } catch (err) {
       console.error("Failed to fetch blockchain records:", err);
+      setError(err?.message || "Failed to load blockchain records");
     } finally {
       setLoading(false);
     }
@@ -1692,7 +1725,7 @@ function BlockchainRecordsView({ securities }) {
       ) : (
         <div className="space-y-4">
           {records.map((record) => {
-            const security = securities.find(s => s.id === record.security_id);
+            const security = securityList.find(s => s.id === record.security_id);
             
             return (
               <div
@@ -1719,7 +1752,7 @@ function BlockchainRecordsView({ securities }) {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Block Number:</span>
-                        <span className="ml-2 font-mono text-foreground">{record.block_number?.toLocaleString()}</span>
+                        <span className="ml-2 font-mono text-foreground">{record.block_number != null ? Number(record.block_number).toLocaleString() : "—"}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Qty / Price:</span>
