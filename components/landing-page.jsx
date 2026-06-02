@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { getAllSecurities } from "@/lib/store";
+import { getAllSecurities, getPlatformStats } from "@/lib/store";
 
 function TickerItem({ symbol, price, pct }) {
   const up = pct >= 0;
@@ -36,6 +36,7 @@ function TickerItem({ symbol, price, pct }) {
 export default function LandingPage({ onLogin, onRegister }) {
   const [securities, setSecurities] = useState([]);
   const [loadingMarket, setLoadingMarket] = useState(true);
+  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     getAllSecurities()
@@ -45,7 +46,20 @@ export default function LandingPage({ onLogin, onRegister }) {
       })
       .catch(() => setSecurities([]))
       .finally(() => setLoadingMarket(false));
+
+    getPlatformStats()
+      .then((s) => setStats(s))
+      .catch(() => setStats(null));
   }, []);
+
+  // Compact currency formatter: 1250 → "M1.25K", 250000 → "M250K", 3_000_000 → "M3.0M"
+  const fmtVolume = (v) => {
+    const n = Number(v || 0);
+    if (n >= 1_000_000) return `M${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000)     return `M${(n / 1_000).toFixed(0)}K`;
+    return `M${n.toFixed(0)}`;
+  };
+  const fmtCount = (v) => Number(v || 0).toLocaleString();
 
   // Build display rows: use real price; synthesise a ±small pct from seed so
   // each security looks slightly different (no historical data available yet).
@@ -162,8 +176,8 @@ export default function LandingPage({ onLogin, onRegister }) {
             <div className="mt-12 grid grid-cols-3 divide-x divide-border rounded-xl border border-border bg-card">
               {[
                 { label: "Listed Securities", value: loadingMarket ? "…" : (securities.length || "0") },
-                { label: "Daily Volume",       value: "M 250K+"                  },
-                { label: "Registered Users",   value: "500+"                     },
+                { label: "Daily Volume",       value: stats ? fmtVolume(stats.dailyVolume) : "…" },
+                { label: "Registered Users",   value: stats ? fmtCount(stats.registeredUsers) : "…" },
               ].map((s, i) => (
                 <div key={i} className="py-4 px-6 text-center">
                   <p className="font-mono text-2xl font-bold text-primary">{s.value}</p>
