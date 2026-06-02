@@ -410,6 +410,10 @@ export async function submitKYC(formData) {
 
     let mainDocumentUrl = null;
     let savedCount = 0;
+    let lastUploadError = null;
+
+    // Ensure a column exists to record why an upload failed (one-time, best-effort)
+    await query(`ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS upload_error text`).catch(() => {});
 
     for (const { field, type } of mappings) {
       const file = formData.get(field);
@@ -417,6 +421,7 @@ export async function submitKYC(formData) {
 
       let documentNumber = (file.name || `${type}.pdf`).replace(/[^a-zA-Z0-9._-]/g, "_");
       let documentUrl = null;
+      let uploadError = null;
 
       // Attempt upload to Supabase Storage
       try {
@@ -426,20 +431,33 @@ export async function submitKYC(formData) {
           if (!mainDocumentUrl) mainDocumentUrl = documentUrl;
           console.log(`[KYC] Document uploaded: ${type} → ${documentUrl}`);
         } else {
-          console.warn(`[KYC] Storage upload failed for ${type}: ${uploadResult.error}. Recording metadata only.`);
+          uploadError = uploadResult.error || "Unknown upload error";
+          lastUploadError = uploadError;
+          console.warn(`[KYC] Storage upload failed for ${type}: ${uploadError}`);
         }
       } catch (uploadErr) {
+        uploadError = uploadErr.message || "Upload exception";
+        lastUploadError = uploadError;
         console.warn(`[KYC] Storage upload exception for ${type}:`, uploadErr.message);
       }
 
       // Always record in kyc_documents — even if storage upload failed.
-      // The admin can still see what documents were submitted; URL will be null if upload failed.
+      // The admin can see what was submitted; document_url is null on failure
+      // and upload_error carries the precise reason for diagnosis.
       await query(
         `INSERT INTO kyc_documents
-           (user_id, kyc_record_id, document_type, document_number, document_url, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW())`,
-        [userId, kycId, type, documentNumber, documentUrl]
-      );
+           (user_id, kyc_record_id, document_type, document_number, document_url, upload_error, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), NOW())`,
+        [userId, kycId, type, documentNumber, documentUrl, uploadError]
+      ).catch(async () => {
+        // Fallback for older schema without upload_error column
+        await query(
+          `INSERT INTO kyc_documents
+             (user_id, kyc_record_id, document_type, document_number, document_url, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW())`,
+          [userId, kycId, type, documentNumber, documentUrl]
+        );
+      });
 
       savedCount++;
     }

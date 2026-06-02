@@ -1598,11 +1598,16 @@ function DocumentViewerModal({
                           {doc.document_number && (
                             <p className="text-xs text-white/40">Filename: {doc.document_number}</p>
                           )}
-                          <p className="text-xs text-white/30 max-w-xs mx-auto">
-                            This document was submitted before cloud storage was configured, or the
-                            upload did not complete. Ask the user to re-submit their KYC so the file
-                            can be stored and reviewed.
-                          </p>
+                          {doc.upload_error ? (
+                            <p className="text-xs text-red-400/80 max-w-md mx-auto break-words">
+                              Upload error: {doc.upload_error}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-white/30 max-w-xs mx-auto">
+                              This document was submitted before cloud storage was configured, or the
+                              upload did not complete. Ask the user to re-submit their KYC.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
