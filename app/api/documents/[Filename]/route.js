@@ -4,16 +4,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const BUCKET_NAME = "kyc-documents";
+// Must match the upload bucket (lib/storage/kyc-storage.js → SUPABASE_KYC_BUCKET).
+const BUCKET_NAME = (process.env.SUPABASE_KYC_BUCKET || "documents").trim();
 
 // Lazy client — created on first request, not at build time.
+// Prefer the service-role key so private buckets are readable server-side.
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
   if (!url || !key) {
     throw new Error(
       "Missing Supabase environment variables. " +
-      "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel."
+      "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel."
     );
   }
   return createClient(url, key);
