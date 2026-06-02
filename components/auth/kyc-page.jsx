@@ -59,29 +59,30 @@ export default function KycPage({ user, targetDashboard }) {
 
   const dashboardRoute = getCorrectDashboard();
 
-  // Session validation
+  // Session validation — accept either the registration session (tempUser),
+  // a logged-in session (user), or the user prop passed by the wrapper.
   useEffect(() => {
-    const tempUserStr = localStorage.getItem("tempUser");
+    if (user?.id) return; // prop session is valid — nothing to check
 
-    if (!tempUserStr || tempUserStr.trim() === "" || tempUserStr === "undefined") {
-      setError("No active registration session found. Please register first.");
+    const raw = localStorage.getItem("tempUser") || localStorage.getItem("user");
+
+    if (!raw || raw.trim() === "" || raw === "undefined") {
+      setError("No active session found. Please register or log in first.");
       setTimeout(() => router.replace("/register"), 2000);
       return;
     }
 
     try {
-      const parsed = JSON.parse(tempUserStr);
+      const parsed = JSON.parse(raw);
       if (!parsed || !parsed.id) {
-        localStorage.removeItem("tempUser");
         setError("Invalid session data. Please register again.");
         setTimeout(() => router.replace("/register"), 2000);
       }
     } catch (err) {
-      localStorage.removeItem("tempUser");
       setError("Session data corrupted. Please register again.");
       setTimeout(() => router.replace("/register"), 2000);
     }
-  }, [router]);
+  }, [router, user]);
 
   const update = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -166,10 +167,15 @@ export default function KycPage({ user, targetDashboard }) {
         return;
       }
 
-      // SUCCESS: Promote tempUser → user so the dashboard can read the session
-      const rawTemp = localStorage.getItem("tempUser");
-      if (rawTemp) {
-        localStorage.setItem("user", rawTemp);
+      // SUCCESS: Promote tempUser → user (stamped with kyc_status) so the
+      // dashboard can read the session and a revisit to /kyc won't loop.
+      try {
+        const rawTemp = localStorage.getItem("tempUser") || localStorage.getItem("user");
+        const base = rawTemp ? JSON.parse(rawTemp) : { id: user.id, role };
+        const merged = { ...base, id: base.id ?? user.id, role: base.role ?? role, kyc_status: "submitted" };
+        localStorage.setItem("user", JSON.stringify(merged));
+        localStorage.removeItem("tempUser");
+      } catch {
         localStorage.removeItem("tempUser");
       }
 
@@ -177,7 +183,7 @@ export default function KycPage({ user, targetDashboard }) {
 
       setTimeout(() => {
         window.location.href = dashboardRoute;
-      }, 1400);
+      }, 1800);
 
     } catch (err) {
       console.error("KYC submission error:", err);
