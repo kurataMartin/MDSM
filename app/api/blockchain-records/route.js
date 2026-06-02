@@ -6,9 +6,15 @@
 
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { reconcileSubmittedChainTxns } from "@/lib/blockchain/recordTrade";
 
 export async function GET() {
   try {
+    // Self-heal: promote any 'submitted' txns that have since confirmed on-chain.
+    await reconcileSubmittedChainTxns(25).catch((e) =>
+      console.warn("[blockchain-records] reconcile skipped:", e.message)
+    );
+
     const result = await query(`
       SELECT
         r.id,
