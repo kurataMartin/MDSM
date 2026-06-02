@@ -1594,14 +1594,14 @@ function DocumentViewerModal({
                       ) : (
                         <div className="text-center text-white/50 space-y-2">
                           <FileText className="h-16 w-16 mx-auto mb-4 text-amber-400/60" />
-                          <p className="text-amber-300/80 font-medium">File not stored in cloud storage</p>
+                          <p className="text-amber-300/80 font-medium">File not available for preview</p>
                           {doc.document_number && (
                             <p className="text-xs text-white/40">Filename: {doc.document_number}</p>
                           )}
                           <p className="text-xs text-white/30 max-w-xs mx-auto">
-                            Document was submitted but could not be uploaded. Configure{" "}
-                            <code className="text-white/50">SUPABASE_SERVICE_ROLE_KEY</code>{" "}
-                            in .env.local to enable file storage.
+                            This document was submitted before cloud storage was configured, or the
+                            upload did not complete. Ask the user to re-submit their KYC so the file
+                            can be stored and reviewed.
                           </p>
                         </div>
                       )}
