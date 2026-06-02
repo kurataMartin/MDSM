@@ -1528,8 +1528,11 @@ function DocumentViewerModal({
               documents.map((doc, index) => {
                 const url = getDisplayUrl(doc);
                 const docType = (doc.document_type || "Document").replace(/_/g, " ");
-                const isImage = url && isImageFile(url);
-                const isPdf = url && isPdfFile(url);
+                // DB-backed URLs (/api/kyc-file/ID) have no extension — detect the
+                // type from the original filename / mime instead.
+                const typeHint = doc.document_number || doc.file_mime || "";
+                const isImage = !!url && (isImageFile(url) || isImageFile(typeHint) || /image\//i.test(doc.file_mime || ""));
+                const isPdf   = !!url && (isPdfFile(url)   || isPdfFile(typeHint)   || /pdf/i.test(doc.file_mime || ""));
 
                 return (
                   <div key={doc.id || index} className="border border-border rounded-2xl overflow-hidden bg-card">

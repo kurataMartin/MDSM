@@ -410,54 +410,63 @@ export async function submitKYC(formData) {
 
     let mainDocumentUrl = null;
     let savedCount = 0;
-    let lastUploadError = null;
 
-    // Ensure a column exists to record why an upload failed (one-time, best-effort)
+    // Store KYC files directly in Postgres (no external object storage needed).
+    // Ensure the columns exist (one-time, best-effort).
     await query(`ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS upload_error text`).catch(() => {});
+    await query(`ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS file_data text`).catch(() => {});
+    await query(`ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS file_mime text`).catch(() => {});
+
+    const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB cap
 
     for (const { field, type } of mappings) {
       const file = formData.get(field);
       if (!file || !(file instanceof Blob) || file.size === 0) continue;
 
-      let documentNumber = (file.name || `${type}.pdf`).replace(/[^a-zA-Z0-9._-]/g, "_");
-      let documentUrl = null;
+      const documentNumber = (file.name || `${type}.pdf`).replace(/[^a-zA-Z0-9._-]/g, "_");
+      let fileData = null;
+      let fileMime = file.type || "application/octet-stream";
       let uploadError = null;
 
-      // Attempt upload to Supabase Storage
+      // Read the file into base64 and store it in the DB.
       try {
-        const uploadResult = await uploadKYCDocument(userId, kycId, type, file);
-        if (uploadResult.success) {
-          documentUrl = uploadResult.publicUrl;
-          if (!mainDocumentUrl) mainDocumentUrl = documentUrl;
-          console.log(`[KYC] Document uploaded: ${type} → ${documentUrl}`);
+        if (file.size > MAX_FILE_BYTES) {
+          uploadError = `File too large (${(file.size / 1048576).toFixed(1)} MB; max 8 MB)`;
         } else {
-          uploadError = uploadResult.error || "Unknown upload error";
-          lastUploadError = uploadError;
-          console.warn(`[KYC] Storage upload failed for ${type}: ${uploadError}`);
+          const buffer = Buffer.from(await file.arrayBuffer());
+          fileData = buffer.toString("base64");
         }
-      } catch (uploadErr) {
-        uploadError = uploadErr.message || "Upload exception";
-        lastUploadError = uploadError;
-        console.warn(`[KYC] Storage upload exception for ${type}:`, uploadErr.message);
+      } catch (readErr) {
+        uploadError = readErr.message || "Could not read uploaded file";
+        console.warn(`[KYC] File read failed for ${type}:`, uploadError);
       }
 
-      // Always record in kyc_documents — even if storage upload failed.
-      // The admin can see what was submitted; document_url is null on failure
-      // and upload_error carries the precise reason for diagnosis.
-      await query(
-        `INSERT INTO kyc_documents
-           (user_id, kyc_record_id, document_type, document_number, document_url, upload_error, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW(), NOW())`,
-        [userId, kycId, type, documentNumber, documentUrl, uploadError]
-      ).catch(async () => {
-        // Fallback for older schema without upload_error column
+      // Insert the row, then stamp document_url with the DB-backed serving route.
+      try {
+        const ins = await query(
+          `INSERT INTO kyc_documents
+             (user_id, kyc_record_id, document_type, document_number, file_data, file_mime, upload_error, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW(), NOW())
+           RETURNING id`,
+          [userId, kycId, type, documentNumber, fileData, fileMime, uploadError]
+        );
+        const docId = ins.rows[0]?.id;
+        if (docId && fileData) {
+          const url = `/api/kyc-file/${docId}`;
+          await query(`UPDATE kyc_documents SET document_url = $1 WHERE id = $2`, [url, docId]);
+          if (!mainDocumentUrl) mainDocumentUrl = url;
+          console.log(`[KYC] Document stored in DB: ${type} → ${url} (${fileMime})`);
+        }
+      } catch (insErr) {
+        // Fallback for older schema without the new columns
+        console.warn(`[KYC] DB store failed for ${type}, recording metadata only:`, insErr.message);
         await query(
           `INSERT INTO kyc_documents
-             (user_id, kyc_record_id, document_type, document_number, document_url, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW())`,
-          [userId, kycId, type, documentNumber, documentUrl]
-        );
-      });
+             (user_id, kyc_record_id, document_type, document_number, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, 'pending', NOW(), NOW())`,
+          [userId, kycId, type, documentNumber]
+        ).catch(() => {});
+      }
 
       savedCount++;
     }
