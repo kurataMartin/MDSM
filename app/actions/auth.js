@@ -143,13 +143,32 @@ if (role === "issuer") {
 
     console.log(`✅ New ${role} registered → Wallet: ${walletAddress}`);
 
+    const roleName = await getRoleName(newUser.role_id);
+
+    // Set the session cookie so the middleware lets the new (KYC-pending) user
+    // reach /kyc. The dashboard gate still keeps them on /kyc until approved.
+    const cookieStore = await cookies();
+    cookieStore.set('user_session', JSON.stringify({
+      id:         newUser.id,
+      email:      newUser.email,
+      name:       newUser.name,
+      role:       roleName,
+      kyc_status: 'pending',
+    }), {
+      httpOnly: true,
+      secure:   process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge:   60 * 60 * 24 * 7,
+      path:     '/',
+    });
+
     return {
       success: true,
       user: {
         id: newUser.id,
         name: newUser.name,
         email: newUser.email,
-        role: await getRoleName(newUser.role_id),
+        role: roleName,
         walletAddress: newUser.wallet_address,
         ...(issuerId && { issuer_profile_id: issuerId }),
       }
