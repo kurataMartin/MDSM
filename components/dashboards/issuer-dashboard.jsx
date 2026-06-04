@@ -596,6 +596,7 @@ function ScanRegisterFlow({ user, onSuccess }) {
   const [files, setFiles]       = useState({ certificateOfIncorporation: null, financials: null });
   const [extracted, setExtracted] = useState({});
   const [confidence, setConfidence] = useState({});
+  const [preview, setPreview]   = useState(null); // { url, mime, name }
   const [form, setForm]         = useState({ name: "", symbol: "", type: "equity", sector: "", description: "", totalTokens: "", initialPrice: "" });
   const [error, setError]       = useState(null);
 
@@ -623,6 +624,13 @@ function ScanRegisterFlow({ user, onSuccess }) {
   async function handleScan() {
     setError(null);
     if (!files.certificateOfIncorporation) { setError("Please attach the Certificate of Incorporation."); return; }
+
+    // Build a local preview of the uploaded certificate (no server round-trip).
+    try {
+      if (preview?.url) URL.revokeObjectURL(preview.url);
+      const cert = files.certificateOfIncorporation;
+      setPreview({ url: URL.createObjectURL(cert), mime: cert.type || "", name: cert.name || "document" });
+    } catch (_) { /* preview is best-effort */ }
 
     const fd = new FormData();
     fd.append("draftId", draftId);
@@ -685,6 +693,24 @@ function ScanRegisterFlow({ user, onSuccess }) {
 
   const fieldClass = (field) =>
     `mt-1.5 ${isLow(field) ? "border-amber-400 ring-1 ring-amber-400/40 bg-amber-50/40" : ""}`;
+
+  const previewBlock = preview ? (
+    <div className="rounded-lg border bg-muted/30 p-3">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">
+        Uploaded document — <span className="text-foreground">{preview.name}</span>
+      </p>
+      {/pdf/i.test(preview.mime) || /\.pdf$/i.test(preview.name) ? (
+        <iframe src={preview.url} title="Document preview" className="w-full h-[460px] rounded border bg-white" />
+      ) : /image/i.test(preview.mime) || /\.(png|jpe?g|gif|webp)$/i.test(preview.name) ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview.url} alt="Uploaded document" className="mx-auto max-h-[460px] rounded border" />
+      ) : (
+        <a href={preview.url} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
+          Open document
+        </a>
+      )}
+    </div>
+  ) : null;
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -749,16 +775,20 @@ function ScanRegisterFlow({ user, onSuccess }) {
 
         {/* PROCESSING */}
         {phase === "processing" && (
-          <div className="mt-10 flex flex-col items-center gap-4 py-8">
-            <RefreshCw className="h-10 w-10 animate-spin text-primary" />
-            <p className="font-medium">Reading documents…</p>
-            <p className="text-xs text-muted-foreground">Extracting company details from your scans</p>
+          <div className="mt-6 space-y-5">
+            <div className="flex flex-col items-center gap-3 py-4">
+              <RefreshCw className="h-10 w-10 animate-spin text-primary" />
+              <p className="font-medium">Reading documents…</p>
+              <p className="text-xs text-muted-foreground">Extracting company details from your scan</p>
+            </div>
+            {previewBlock}
           </div>
         )}
 
         {/* REVIEW (prefilled form) */}
         {phase === "review" && (
           <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+            {previewBlock}
             {!manualMode && (
               <div className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-3 text-xs text-amber-800">
                 Fields highlighted in <span className="font-semibold">amber</span> were read with low confidence — please verify them.
