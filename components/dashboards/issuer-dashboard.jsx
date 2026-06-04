@@ -48,6 +48,11 @@ import {
   getIssuerReports,
   submitReport,
 } from "@/lib/store";
+import {
+  startDraft,
+  uploadDraftDocuments,
+  processDraftExtraction,
+} from "@/app/actions/registration";
 
 const NAV_ITEMS = [
   { id: "overview",       label: "Overview",          icon: LayoutDashboard },
@@ -56,6 +61,7 @@ const NAV_ITEMS = [
   { id: "dividends",      label: "Dividends",         icon: DollarSign },
   { id: "reports",        label: "Reports",           icon: FileCheck },
   { id: "tokens",         label: "Token Management",  icon: BarChart3 },
+  { id: "register-company", label: "Register Company",  icon: Building2 },
   { id: "new-listing",    label: "Submit Security",   icon: PlusCircle },
   { id: "company",        label: "Company Data",      icon: Building2 },
 ];
@@ -162,6 +168,7 @@ export default function IssuerDashboard({ user, onLogout }) {
       {activeTab === "dividends"      && <DividendManager user={user} securities={myListings} />}
       {activeTab === "reports"        && <ReportsManager user={user} issuerId={issuerId} securities={myListings} />}
       {activeTab === "tokens"         && <TokenManagement tokenStats={tokenStats} />}
+      {activeTab === "register-company" && <ScanRegisterFlow user={user} onSuccess={handleNewListingSuccess} />}
       {activeTab === "new-listing"    && <NewListingForm user={user} onSuccess={handleNewListingSuccess} />}
       {activeTab === "company"        && <CompanyData user={user} />}
     </DashboardShell>
@@ -581,6 +588,244 @@ function MyListings({ listings, securities }) {
 }
 
 // ────────────────────────────────────────────────
+// ScanRegisterFlow — scan company documents, auto-extract, review & submit
+// ────────────────────────────────────────────────
+function ScanRegisterFlow({ user, onSuccess }) {
+  // phases: intro → upload → processing → review → submitting → submitted | failed
+  const [phase, setPhase]       = useState("intro");
+  const [draftId, setDraftId]   = useState(null);
+  const [files, setFiles]       = useState({ certificateOfIncorporation: null, financials: null });
+  const [extracted, setExtracted] = useState({});
+  const [confidence, setConfidence] = useState({});
+  const [form, setForm]         = useState({ name: "", symbol: "", type: "equity", sector: "", description: "", totalTokens: "", initialPrice: "" });
+  const [error, setError]       = useState(null);
+
+  const LOW = 0.8;
+  const isLow = (field) => confidence[field] != null && confidence[field] < LOW;
+
+  async function handleStart() {
+    setError(null);
+    const res = await startDraft(user?.id);
+    if (!res?.success) { setError(res?.error || "Could not start registration"); return; }
+    setDraftId(res.draftId);
+    setPhase("upload");
+  }
+
+  async function handleScan() {
+    setError(null);
+    if (!files.certificateOfIncorporation) { setError("Please attach the Certificate of Incorporation."); return; }
+
+    const fd = new FormData();
+    fd.append("draftId", draftId);
+    if (files.certificateOfIncorporation) fd.append("certificateOfIncorporation", files.certificateOfIncorporation);
+    if (files.financials) fd.append("financials", files.financials);
+
+    setPhase("processing");
+    const up = await uploadDraftDocuments(fd);
+    if (!up?.success) { setError(up?.error || "Upload failed"); setPhase("upload"); return; }
+
+    const ex = await processDraftExtraction(draftId);
+    if (!ex?.success) { setError(ex?.error || "Could not read the document"); setPhase("failed"); return; }
+
+    const f = ex.extracted || {};
+    setExtracted(f);
+    setConfidence(ex.confidence || {});
+    // Map extracted company fields → listing form fields
+    const suggestedSymbol = (f.company_name || "")
+      .replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 5) || "";
+    setForm({
+      name:         f.company_name || "",
+      symbol:       suggestedSymbol,
+      type:         "equity",
+      sector:       f.company_type || "",
+      description:  [f.company_type, f.registered_address, f.directors ? `Directors: ${f.directors}` : null]
+                      .filter(Boolean).join(" · "),
+      totalTokens:  "",
+      initialPrice: "",
+    });
+    setPhase("review");
+  }
+
+  const upd = (k, v) => { setForm((p) => ({ ...p, [k]: v })); setError(null); };
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+    const name = form.name.trim();
+    const symbol = form.symbol.trim().toUpperCase();
+    const tokens = Number(form.totalTokens);
+    const price  = Number(form.initialPrice);
+    if (name.length < 3) { setError("Company name must be at least 3 characters."); return; }
+    if (!/^[A-Z0-9]{2,8}$/.test(symbol)) { setError("Ticker must be 2–8 uppercase letters/numbers."); return; }
+    if (!Number.isInteger(tokens) || tokens < 1) { setError("Total shares must be a whole number ≥ 1."); return; }
+    if (!price || price <= 0) { setError("Initial price must be greater than 0."); return; }
+
+    setPhase("submitting");
+    try {
+      await submitListing(
+        { name, symbol, totalTokens: tokens, initialPrice: price, type: form.type, description: form.description, sector: form.sector },
+        user
+      );
+      setPhase("submitted");
+      setTimeout(() => onSuccess?.(), 1800);
+    } catch (err) {
+      setError(err.message || "Submission failed.");
+      setPhase("review");
+    }
+  }
+
+  const fieldClass = (field) =>
+    `mt-1.5 ${isLow(field) ? "border-amber-400 ring-1 ring-amber-400/40 bg-amber-50/40" : ""}`;
+
+  // ── Render ──────────────────────────────────────────────────────────────
+  return (
+    <div className="mx-auto w-full max-w-2xl">
+      <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold">Register New Public Company</h2>
+        </div>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          Scan your incorporation documents — we’ll read them and pre-fill the listing form for you to verify.
+        </p>
+
+        {error && (
+          <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /> {error}
+          </div>
+        )}
+
+        {/* INTRO */}
+        {phase === "intro" && (
+          <div className="mt-6 text-center">
+            <Button onClick={handleStart} className="gap-2"><Upload className="h-4 w-4" /> Start Registration</Button>
+          </div>
+        )}
+
+        {/* UPLOAD */}
+        {phase === "upload" && (
+          <div className="mt-6 space-y-5">
+            <div>
+              <Label>Certificate of Incorporation <span className="text-red-500">*</span></Label>
+              <Input type="file" accept=".pdf,.png,.jpg,.jpeg" className="mt-1.5"
+                onChange={(e) => setFiles((p) => ({ ...p, certificateOfIncorporation: e.target.files?.[0] || null }))} />
+              <p className="mt-1 text-[11px] text-muted-foreground">PDF, PNG or JPG · max 8 MB</p>
+            </div>
+            <div>
+              <Label>Financial Statements (optional)</Label>
+              <Input type="file" accept=".pdf,.png,.jpg,.jpeg" className="mt-1.5"
+                onChange={(e) => setFiles((p) => ({ ...p, financials: e.target.files?.[0] || null }))} />
+            </div>
+            <Button onClick={handleScan} className="w-full gap-2"><Upload className="h-4 w-4" /> Scan &amp; Extract</Button>
+          </div>
+        )}
+
+        {/* PROCESSING */}
+        {phase === "processing" && (
+          <div className="mt-10 flex flex-col items-center gap-4 py-8">
+            <RefreshCw className="h-10 w-10 animate-spin text-primary" />
+            <p className="font-medium">Reading documents…</p>
+            <p className="text-xs text-muted-foreground">Extracting company details from your scans</p>
+          </div>
+        )}
+
+        {/* REVIEW (prefilled form) */}
+        {phase === "review" && (
+          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+            <div className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-3 text-xs text-amber-800">
+              Fields highlighted in <span className="font-semibold">amber</span> were read with low confidence — please verify them.
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <Label>Company Name <span className="text-red-500">*</span></Label>
+                <Input value={form.name} onChange={(e) => upd("name", e.target.value)} className={fieldClass("company_name")} maxLength={120} />
+              </div>
+              <div>
+                <Label>Ticker Symbol <span className="text-red-500">*</span></Label>
+                <Input value={form.symbol} onChange={(e) => upd("symbol", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))} className="mt-1.5" />
+              </div>
+              <div>
+                <Label>Security Type</Label>
+                <select value={form.type} onChange={(e) => upd("type", e.target.value)}
+                  className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm">
+                  <option value="equity">Equity</option>
+                  <option value="bond">Bond</option>
+                  <option value="fund">Fund</option>
+                </select>
+              </div>
+              <div>
+                <Label>Sector / Company Type</Label>
+                <Input value={form.sector} onChange={(e) => upd("sector", e.target.value)} className={fieldClass("company_type")} />
+              </div>
+              <div>
+                <Label>Total Shares <span className="text-red-500">*</span></Label>
+                <Input type="number" min="1" step="1" value={form.totalTokens} onChange={(e) => upd("totalTokens", e.target.value)}
+                  placeholder="e.g. 1000000" className="mt-1.5" />
+              </div>
+              <div>
+                <Label>Initial Price (M) <span className="text-red-500">*</span></Label>
+                <Input type="number" min="0" step="0.01" value={form.initialPrice} onChange={(e) => upd("initialPrice", e.target.value)}
+                  placeholder="e.g. 25.00" className="mt-1.5" />
+              </div>
+            </div>
+
+            <div>
+              <Label>Description</Label>
+              <textarea value={form.description} onChange={(e) => upd("description", e.target.value)} rows={3} maxLength={1000}
+                className={`w-full rounded-md border bg-background px-3 py-2 text-sm ${isLow("directors") ? "border-amber-400 ring-1 ring-amber-400/40" : "mt-1.5"}`} />
+            </div>
+
+            {/* Extracted reference details (read-only) */}
+            {(extracted.registration_number || extracted.incorporation_date) && (
+              <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                {extracted.registration_number && (
+                  <div className={isLow("registration_number") ? "text-amber-700" : ""}>
+                    Reg. number: <span className="font-mono">{extracted.registration_number}</span>{isLow("registration_number") && " — verify"}
+                  </div>
+                )}
+                {extracted.incorporation_date && <div>Incorporated: {extracted.incorporation_date}</div>}
+              </div>
+            )}
+
+            <Button type="submit" className="w-full gap-2"><Send className="h-4 w-4" /> Submit for Public Listing</Button>
+          </form>
+        )}
+
+        {/* SUBMITTING */}
+        {phase === "submitting" && (
+          <div className="mt-10 flex flex-col items-center gap-4 py-8">
+            <RefreshCw className="h-10 w-10 animate-spin text-primary" />
+            <p className="font-medium">Submitting for review…</p>
+          </div>
+        )}
+
+        {/* SUBMITTED */}
+        {phase === "submitted" && (
+          <div className="mt-6 rounded-xl border bg-card p-8 text-center">
+            <CheckCircle2 className="mx-auto h-14 w-14 text-green-600" />
+            <h3 className="mt-4 text-xl font-bold">Company Submitted</h3>
+            <p className="mt-3 text-muted-foreground">
+              Your company has been submitted for review. Once an administrator approves it,
+              it will be tokenized and listed live on the market.
+            </p>
+          </div>
+        )}
+
+        {/* FAILED */}
+        {phase === "failed" && (
+          <div className="mt-6 text-center">
+            <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+            <p className="mt-3 font-medium">We couldn’t read that document</p>
+            <p className="mt-1 text-sm text-muted-foreground">Upload a clearer scan, or fill the form manually under “Submit Security”.</p>
+            <Button variant="outline" className="mt-4" onClick={() => { setPhase("upload"); setError(null); }}>Try Again</Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // NewListingForm – fixed state keys + better submit
 // ────────────────────────────────────────────────
 function NewListingForm({ user, onSuccess }) {
