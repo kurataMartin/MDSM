@@ -61,8 +61,7 @@ const NAV_ITEMS = [
   { id: "dividends",      label: "Dividends",         icon: DollarSign },
   { id: "reports",        label: "Reports",           icon: FileCheck },
   { id: "tokens",         label: "Token Management",  icon: BarChart3 },
-  { id: "register-company", label: "Register Company",  icon: Building2 },
-  { id: "new-listing",    label: "Submit Security",   icon: PlusCircle },
+  { id: "register-company", label: "Register Security", icon: PlusCircle },
   { id: "company",        label: "Company Data",      icon: Building2 },
 ];
 
@@ -169,7 +168,6 @@ export default function IssuerDashboard({ user, onLogout }) {
       {activeTab === "reports"        && <ReportsManager user={user} issuerId={issuerId} securities={myListings} />}
       {activeTab === "tokens"         && <TokenManagement tokenStats={tokenStats} />}
       {activeTab === "register-company" && <ScanRegisterFlow user={user} onSuccess={handleNewListingSuccess} />}
-      {activeTab === "new-listing"    && <NewListingForm user={user} onSuccess={handleNewListingSuccess} />}
       {activeTab === "company"        && <CompanyData user={user} />}
     </DashboardShell>
   );
@@ -593,6 +591,7 @@ function MyListings({ listings, securities }) {
 function ScanRegisterFlow({ user, onSuccess }) {
   // phases: intro → upload → processing → review → submitting → submitted | failed
   const [phase, setPhase]       = useState("intro");
+  const [manualMode, setManualMode] = useState(false);
   const [draftId, setDraftId]   = useState(null);
   const [files, setFiles]       = useState({ certificateOfIncorporation: null, financials: null });
   const [extracted, setExtracted] = useState({});
@@ -608,7 +607,17 @@ function ScanRegisterFlow({ user, onSuccess }) {
     const res = await startDraft(user?.id);
     if (!res?.success) { setError(res?.error || "Could not start registration"); return; }
     setDraftId(res.draftId);
+    setManualMode(false);
     setPhase("upload");
+  }
+
+  function handleManual() {
+    setError(null);
+    setManualMode(true);
+    setExtracted({});
+    setConfidence({});
+    setForm({ name: "", symbol: "", type: "equity", sector: "", description: "", totalTokens: "", initialPrice: "" });
+    setPhase("review");
   }
 
   async function handleScan() {
@@ -686,7 +695,8 @@ function ScanRegisterFlow({ user, onSuccess }) {
           <h2 className="text-xl font-semibold">Register New Public Company</h2>
         </div>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Scan your incorporation documents — we’ll read them and pre-fill the listing form for you to verify.
+          Register a company and list its security. Scan your incorporation documents to
+          auto-fill the form, or enter the details manually.
         </p>
 
         {error && (
@@ -695,10 +705,27 @@ function ScanRegisterFlow({ user, onSuccess }) {
           </div>
         )}
 
-        {/* INTRO */}
+        {/* INTRO — choose scan or manual */}
         {phase === "intro" && (
-          <div className="mt-6 text-center">
-            <Button onClick={handleStart} className="gap-2"><Upload className="h-4 w-4" /> Start Registration</Button>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <button onClick={handleStart}
+              className="group rounded-xl border-2 border-primary/30 bg-primary/5 p-5 text-left transition-all hover:border-primary hover:bg-primary/10">
+              <Upload className="h-6 w-6 text-primary" />
+              <p className="mt-3 font-semibold">Scan Documents</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Upload your Certificate of Incorporation — we’ll read it and pre-fill the form for you to verify.
+              </p>
+              <span className="mt-3 inline-block text-xs font-medium text-primary">Recommended →</span>
+            </button>
+            <button onClick={handleManual}
+              className="group rounded-xl border-2 border-border bg-card p-5 text-left transition-all hover:border-foreground/30">
+              <PlusCircle className="h-6 w-6 text-muted-foreground" />
+              <p className="mt-3 font-semibold">Enter Manually</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Fill in the company and security details yourself, without uploading documents.
+              </p>
+              <span className="mt-3 inline-block text-xs font-medium text-foreground/70">Fill the form →</span>
+            </button>
           </div>
         )}
 
@@ -732,9 +759,11 @@ function ScanRegisterFlow({ user, onSuccess }) {
         {/* REVIEW (prefilled form) */}
         {phase === "review" && (
           <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-            <div className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-3 text-xs text-amber-800">
-              Fields highlighted in <span className="font-semibold">amber</span> were read with low confidence — please verify them.
-            </div>
+            {!manualMode && (
+              <div className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-3 text-xs text-amber-800">
+                Fields highlighted in <span className="font-semibold">amber</span> were read with low confidence — please verify them.
+              </div>
+            )}
 
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
@@ -749,9 +778,10 @@ function ScanRegisterFlow({ user, onSuccess }) {
                 <Label>Security Type</Label>
                 <select value={form.type} onChange={(e) => upd("type", e.target.value)}
                   className="mt-1.5 w-full rounded-md border bg-background px-3 py-2 text-sm">
-                  <option value="equity">Equity</option>
-                  <option value="bond">Bond</option>
-                  <option value="fund">Fund</option>
+                  <option value="equity">Equity (Shares)</option>
+                  <option value="bond">Bond / Debt Instrument</option>
+                  <option value="fund">Fund / ETF Unit</option>
+                  <option value="debt">Debt Security</option>
                 </select>
               </div>
               <div>
