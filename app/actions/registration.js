@@ -4,6 +4,7 @@
 // Phase 2: draft lifecycle + document upload (extraction added in Phase 3).
 
 import { createDraft, addDraftDocument, setDraftStatus, getDraft } from "@/lib/registration";
+import { extractFromDraft } from "@/lib/extraction";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 
@@ -70,6 +71,22 @@ export async function uploadDraftDocuments(formData) {
     return { success: true, draftId, count };
   } catch (err) {
     console.error("[REG] uploadDraftDocuments failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Event 3 — EXTRACTION_PROCESSING
+// Called by the client immediately after a successful upload. Runs OCR/LLM
+// extraction (Phase 3 = stub) and flips the draft to 'parsed' or 'failed'.
+// Kept as its own short request so it stays within serverless limits and works
+// unchanged when the real (slower) Claude pipeline is dropped in.
+export async function processDraftExtraction(draftId) {
+  try {
+    if (!draftId) return { success: false, error: "Missing draftId" };
+    const result = await extractFromDraft(draftId);
+    return result;
+  } catch (err) {
+    console.error("[REG] processDraftExtraction failed:", err.message);
     return { success: false, error: err.message };
   }
 }
