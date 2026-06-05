@@ -633,16 +633,24 @@ function ScanRegisterFlow({ user, onSuccess }) {
       setPreview({ url: URL.createObjectURL(cert), mime: cert.type || "", name: cert.name || "document" });
     } catch (_) { /* preview is best-effort */ }
 
+    setPhase("processing");
+
+    // Create a FRESH draft for every scan so a re-upload never reads a
+    // previously-uploaded document from a reused draft.
+    const fresh = await startDraft(user?.id);
+    if (!fresh?.success) { setError(fresh?.error || "Could not start"); setPhase("upload"); return; }
+    const freshId = fresh.draftId;
+    setDraftId(freshId);
+
     const fd = new FormData();
-    fd.append("draftId", draftId);
+    fd.append("draftId", freshId);
     if (files.certificateOfIncorporation) fd.append("certificateOfIncorporation", files.certificateOfIncorporation);
     if (files.financials) fd.append("financials", files.financials);
 
-    setPhase("processing");
     const up = await uploadDraftDocuments(fd);
     if (!up?.success) { setError(up?.error || "Upload failed"); setPhase("upload"); return; }
 
-    const ex = await processDraftExtraction(draftId);
+    const ex = await processDraftExtraction(freshId);
     if (!ex?.success) { setError(ex?.error || "Could not read the document"); setPhase("failed"); return; }
 
     const f = ex.extracted || {};
