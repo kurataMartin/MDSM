@@ -597,6 +597,8 @@ function ScanRegisterFlow({ user, onSuccess }) {
   const [files, setFiles]       = useState({ certificateOfIncorporation: null, financials: null });
   const [extracted, setExtracted] = useState({});
   const [confidence, setConfidence] = useState({});
+  const [missing, setMissing]   = useState([]);   // expected fields not found
+  const [readable, setReadable] = useState(true);  // any text read from document
   const [preview, setPreview]   = useState(null); // { url, mime, name }
   const [form, setForm]         = useState({ name: "", symbol: "", type: "equity", sector: "", description: "", totalTokens: "", initialPrice: "" });
   const [error, setError]       = useState(null);
@@ -656,16 +658,18 @@ function ScanRegisterFlow({ user, onSuccess }) {
     const f = ex.extracted || {};
     setExtracted(f);
     setConfidence(ex.confidence || {});
-    // Map extracted company fields → listing form fields
+    setMissing(ex.missing || []);
+    setReadable(ex.readable !== false);
+    // Pre-fill ONLY from fields actually found — never fabricate.
     const suggestedSymbol = (f.company_name || "")
       .replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 5) || "";
+    const descParts = [f.company_type, f.registered_address, f.directors ? `Directors: ${f.directors}` : null].filter(Boolean);
     setForm({
       name:         f.company_name || "",
       symbol:       suggestedSymbol,
       type:         "equity",
       sector:       f.company_type || "",
-      description:  [f.company_type, f.registered_address, f.directors ? `Directors: ${f.directors}` : null]
-                      .filter(Boolean).join(" · "),
+      description:  descParts.join(" · "),
       totalTokens:  "",
       initialPrice: "",
     });
@@ -838,6 +842,27 @@ function ScanRegisterFlow({ user, onSuccess }) {
             </button>
             {renderPreview(false)}
 
+            {/* Feedback: document could not be read at all */}
+            {!manualMode && !readable && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-300/50 bg-red-50/60 p-3 text-xs text-red-800">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  We couldn’t read any text from this document (it may be a scanned image or a
+                  protected PDF). Nothing was auto-filled — please enter the details manually below.
+                </span>
+              </div>
+            )}
+
+            {/* Feedback: some expected fields were not found on the document */}
+            {!manualMode && readable && missing.length > 0 && (
+              <div className="rounded-lg border border-amber-300/50 bg-amber-50/60 p-3 text-xs text-amber-800">
+                <p className="font-semibold">Not found on the document — please enter manually:</p>
+                <ul className="mt-1 list-disc pl-4">
+                  {missing.map((k) => <li key={k}>{FIELD_LABELS[k] || k}</li>)}
+                </ul>
+              </div>
+            )}
+
             {/* Highlighted extracted information */}
             {!manualMode && Object.keys(extracted).length > 0 && (
               <div className="rounded-lg border bg-card p-3">
@@ -864,7 +889,7 @@ function ScanRegisterFlow({ user, onSuccess }) {
               </div>
             )}
 
-            {!manualMode && (
+            {!manualMode && Object.values(confidence).some((c) => c < 0.8) && (
               <div className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-3 text-xs text-amber-800">
                 Fields highlighted in <span className="font-semibold">amber</span> were read with low confidence — please verify them.
               </div>
