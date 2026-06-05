@@ -27,6 +27,7 @@ import {
   Paperclip,
   Download,
   X,
+  ArrowLeft,
 } from "lucide-react";
 import DashboardShell from "@/components/dashboard-shell";
 import { useAutoRefresh } from "@/lib/hooks/useAutoRefresh";
@@ -789,6 +790,10 @@ function ScanRegisterFlow({ user, onSuccess }) {
         {/* UPLOAD */}
         {phase === "upload" && (
           <div className="mt-6 space-y-5">
+            <button type="button" onClick={() => { setError(null); setPhase("intro"); }}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </button>
             <div>
               <Label>Certificate of Incorporation <span className="text-red-500">*</span></Label>
               <Input type="file" accept=".pdf,.png,.jpg,.jpeg" className="mt-1.5"
@@ -818,6 +823,11 @@ function ScanRegisterFlow({ user, onSuccess }) {
         {/* REVIEW (prefilled form) */}
         {phase === "review" && (
           <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+            <button type="button"
+              onClick={() => { setError(null); setPhase(manualMode ? "intro" : "upload"); }}
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </button>
             {renderPreview(false)}
 
             {/* Highlighted extracted information */}

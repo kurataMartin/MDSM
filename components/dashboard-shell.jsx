@@ -13,6 +13,7 @@ import {
   Activity,
   ChevronLeft,
   ChevronRight,
+  ArrowLeft,
   Loader2,
   TrendingUp,
   TrendingDown,
@@ -273,6 +274,17 @@ export default function DashboardShell({
             >
               {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </button>
+            {/* Back to overview — shown on any tab other than the first/home tab */}
+            {navItems.length > 0 && activeTab !== navItems[0]?.id && (
+              <button
+                onClick={() => onTabChange?.(navItems[0].id)}
+                title={`Back to ${navItems[0]?.label || "Overview"}`}
+                className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-secondary"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Back</span>
+              </button>
+            )}
             <div>
               <h2 className="text-base font-extrabold text-white tracking-tight">
                 {navItems.find((n) => n.id === activeTab)?.label || "Dashboard"}
