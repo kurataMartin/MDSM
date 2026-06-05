@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["pg", "pg-native", "pdf-parse"],
+  serverExternalPackages: ["pg", "pg-native"],
 
   // Hide the Next.js dev indicator (the triangle logo + rendering/compiling overlay)
   devIndicators: false,
