@@ -694,23 +694,54 @@ function ScanRegisterFlow({ user, onSuccess }) {
   const fieldClass = (field) =>
     `mt-1.5 ${isLow(field) ? "border-amber-400 ring-1 ring-amber-400/40 bg-amber-50/40" : ""}`;
 
-  const previewBlock = preview ? (
-    <div className="rounded-lg border bg-muted/30 p-3">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">
-        Uploaded document — <span className="text-foreground">{preview.name}</span>
-      </p>
-      {/pdf/i.test(preview.mime) || /\.pdf$/i.test(preview.name) ? (
-        <iframe src={preview.url} title="Document preview" className="w-full h-[460px] rounded border bg-white" />
-      ) : /image/i.test(preview.mime) || /\.(png|jpe?g|gif|webp)$/i.test(preview.name) ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={preview.url} alt="Uploaded document" className="mx-auto max-h-[460px] rounded border" />
-      ) : (
-        <a href={preview.url} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
-          Open document
-        </a>
-      )}
-    </div>
-  ) : null;
+  const FIELD_LABELS = {
+    company_name: "Company Name", registration_number: "Registration No.",
+    incorporation_date: "Incorporation Date", company_type: "Company Type",
+    registered_address: "Registered Address", directors: "Directors",
+    authorized_shares: "Authorised Shares", share_capital: "Share Capital",
+    contact_email: "Contact Email",
+  };
+
+  function renderPreview(scanning = false) {
+    if (!preview) return null;
+    const isPdf = /pdf/i.test(preview.mime) || /\.pdf$/i.test(preview.name);
+    const isImg = /image/i.test(preview.mime) || /\.(png|jpe?g|gif|webp)$/i.test(preview.name);
+    return (
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          {scanning ? (
+            <span className="inline-flex items-center gap-1.5 text-emerald-600">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              Scanning document…
+            </span>
+          ) : (
+            <>Uploaded document — <span className="text-foreground">{preview.name}</span></>
+          )}
+        </p>
+        <div className="relative overflow-hidden rounded border bg-white">
+          {isPdf ? (
+            <iframe src={preview.url} title="Document preview" className="w-full h-[460px]" />
+          ) : isImg ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview.url} alt="Uploaded document" className="mx-auto max-h-[460px]" />
+          ) : (
+            <a href={preview.url} target="_blank" rel="noreferrer" className="block p-6 text-sm text-primary underline">
+              Open document
+            </a>
+          )}
+          {scanning && (
+            <>
+              <div className="scan-tint" />
+              <div className="scan-sweep" />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -773,22 +804,48 @@ function ScanRegisterFlow({ user, onSuccess }) {
           </div>
         )}
 
-        {/* PROCESSING */}
+        {/* PROCESSING — visual scan */}
         {phase === "processing" && (
           <div className="mt-6 space-y-5">
-            <div className="flex flex-col items-center gap-3 py-4">
-              <RefreshCw className="h-10 w-10 animate-spin text-primary" />
-              <p className="font-medium">Reading documents…</p>
-              <p className="text-xs text-muted-foreground">Extracting company details from your scan</p>
+            <div className="flex flex-col items-center gap-2 py-2">
+              <p className="font-medium text-emerald-600">Scanning &amp; extracting…</p>
+              <p className="text-xs text-muted-foreground">Reading company details from your document</p>
             </div>
-            {previewBlock}
+            {renderPreview(true)}
           </div>
         )}
 
         {/* REVIEW (prefilled form) */}
         {phase === "review" && (
           <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-            {previewBlock}
+            {renderPreview(false)}
+
+            {/* Highlighted extracted information */}
+            {!manualMode && Object.keys(extracted).length > 0 && (
+              <div className="rounded-lg border bg-card p-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  Extracted Information
+                  <span className="text-muted-foreground font-normal">({Object.keys(extracted).length} fields)</span>
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {Object.entries(extracted).map(([k, v]) => (
+                    <div key={k}
+                      className={`animate-in fade-in slide-in-from-bottom-1 rounded-md border px-3 py-2 text-xs
+                        ${isLow(k) ? "border-amber-300 bg-amber-50/60" : "border-emerald-200 bg-emerald-50/40"}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">{FIELD_LABELS[k] || k}</span>
+                        <span className={`shrink-0 font-medium ${isLow(k) ? "text-amber-600" : "text-emerald-600"}`}>
+                          {isLow(k) ? "verify" : `${Math.round((confidence[k] || 0) * 100)}%`}
+                        </span>
+                      </div>
+                      <div className="truncate font-medium text-foreground">{String(v)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {!manualMode && (
               <div className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-3 text-xs text-amber-800">
                 Fields highlighted in <span className="font-semibold">amber</span> were read with low confidence — please verify them.

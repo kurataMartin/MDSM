@@ -59,6 +59,35 @@ html:not(.dark) .text-white {
   animation-play-state: paused;
 }
 
+/* ── Document scanning animation ───────────────────────────── */
+@keyframes scanSweep {
+  0%   { top: 0%; }
+  100% { top: 100%; }
+}
+.scan-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  border-radius: 4px;
+  background: linear-gradient(to bottom,
+    rgba(34,197,94,0) 0%,
+    rgba(34,197,94,0.9) 50%,
+    rgba(34,197,94,0) 100%);
+  box-shadow: 0 0 18px 5px rgba(34,197,94,0.55);
+  animation: scanSweep 2.1s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 5;
+}
+.scan-tint {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(34,197,94,0.05) 0 2px, transparent 2px 6px);
+  pointer-events: none;
+  z-index: 4;
+}
+
 /* Subtle grid background for hero */
 .bg-grid {
   background-image:
