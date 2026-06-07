@@ -53,7 +53,6 @@ import {
   startDraft,
   uploadDraftDocuments,
   processDraftExtraction,
-  processDraftText,
 } from "@/app/actions/registration";
 
 const NAV_ITEMS = [
@@ -655,43 +654,8 @@ function ScanRegisterFlow({ user, onSuccess }) {
     const up = await uploadDraftDocuments(fd);
     if (!up?.success) { setError(up?.error || "Upload failed"); setPhase("upload"); return; }
 
-    // Choose the extraction path by file type:
-    //  • PDF   → server-side text extraction (unpdf)
-    //  • image → client-side OCR (tesseract.js), then parse the text on the server
-    const cert = files.certificateOfIncorporation;
-    const isImage = /image\//i.test(cert.type || "") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(cert.name || "");
-
-    let ex;
-    if (isImage) {
-      let worker;
-      try {
-        const { createWorker } = await import("tesseract.js");
-        const runOcr = (async () => {
-          worker = await createWorker("eng", 1, {
-            logger: (m) => {
-              if (m.status === "recognizing text") setOcrProgress(Math.round((m.progress || 0) * 100));
-            },
-          });
-          const { data } = await worker.recognize(cert);
-          return data?.text || "";
-        })();
-        // Hard timeout so OCR can never hang the UI indefinitely.
-        const text = await Promise.race([
-          runOcr,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("OCR timed out")), 60000)),
-        ]);
-        setOcrProgress(100);
-        ex = await processDraftText(freshId, text);
-      } catch (ocrErr) {
-        console.error("OCR failed/timeout:", ocrErr);
-        // Couldn't OCR — proceed with empty text → unreadable → manual entry.
-        ex = await processDraftText(freshId, "");
-      } finally {
-        try { if (worker) await worker.terminate(); } catch (_) {}
-      }
-    } else {
-      ex = await processDraftExtraction(freshId);
-    }
+    // Server-side extraction handles both PDFs (text) and images (OCR).
+    const ex = await processDraftExtraction(freshId);
     if (!ex?.success) { setError(ex?.error || "Could not read the document"); setPhase("failed"); return; }
 
     const f = ex.extracted || {};
