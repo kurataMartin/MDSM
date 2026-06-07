@@ -655,8 +655,20 @@ function ScanRegisterFlow({ user, onSuccess }) {
     if (!up?.success) { setError(up?.error || "Upload failed"); setPhase("upload"); return; }
 
     // Server-side extraction handles both PDFs (text) and images (OCR).
-    const ex = await processDraftExtraction(freshId);
-    if (!ex?.success) { setError(ex?.error || "Could not read the document"); setPhase("failed"); return; }
+    // Bound the wait AND catch any rejection (e.g. serverless function killed)
+    // so the UI can never hang — it always reaches the review/manual step.
+    const fallback = { success: true, extracted: {}, confidence: {}, missing: [], readable: false };
+    let ex;
+    try {
+      ex = await Promise.race([
+        processDraftExtraction(freshId),
+        new Promise((resolve) => setTimeout(() => resolve(fallback), 45000)),
+      ]);
+    } catch (e) {
+      console.error("Extraction call failed:", e);
+      ex = fallback;
+    }
+    if (!ex?.success) { ex = fallback; }
 
     const f = ex.extracted || {};
     setExtracted(f);
