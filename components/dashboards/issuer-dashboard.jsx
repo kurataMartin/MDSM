@@ -663,16 +663,31 @@ function ScanRegisterFlow({ user, onSuccess }) {
 
     let ex;
     if (isImage) {
+      let worker;
       try {
-        const Tesseract = (await import("tesseract.js")).default;
-        const { data } = await Tesseract.recognize(cert, "eng", {
-          logger: (m) => { if (m.status === "recognizing text") setOcrProgress(Math.round((m.progress || 0) * 100)); },
-        });
+        const { createWorker } = await import("tesseract.js");
+        const runOcr = (async () => {
+          worker = await createWorker("eng", 1, {
+            logger: (m) => {
+              if (m.status === "recognizing text") setOcrProgress(Math.round((m.progress || 0) * 100));
+            },
+          });
+          const { data } = await worker.recognize(cert);
+          return data?.text || "";
+        })();
+        // Hard timeout so OCR can never hang the UI indefinitely.
+        const text = await Promise.race([
+          runOcr,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("OCR timed out")), 60000)),
+        ]);
         setOcrProgress(100);
-        ex = await processDraftText(freshId, data?.text || "");
+        ex = await processDraftText(freshId, text);
       } catch (ocrErr) {
-        console.error("OCR failed:", ocrErr);
-        ex = await processDraftText(freshId, ""); // treat as unreadable → manual entry
+        console.error("OCR failed/timeout:", ocrErr);
+        // Couldn't OCR — proceed with empty text → unreadable → manual entry.
+        ex = await processDraftText(freshId, "");
+      } finally {
+        try { if (worker) await worker.terminate(); } catch (_) {}
       }
     } else {
       ex = await processDraftExtraction(freshId);
