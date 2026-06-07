@@ -610,7 +610,6 @@ function ScanRegisterFlow({ user, onSuccess }) {
   // phases: intro → upload → processing → review → submitting → submitted | failed
   const [phase, setPhase]       = useState("intro");
   const [manualMode, setManualMode] = useState(false);
-  const [draftId, setDraftId]   = useState(null);
   const [files, setFiles]       = useState({ certificateOfIncorporation: null, financials: null });
   const [extracted, setExtracted] = useState({});
   const [confidence, setConfidence] = useState({});
@@ -624,11 +623,9 @@ function ScanRegisterFlow({ user, onSuccess }) {
   const LOW = 0.8;
   const isLow = (field) => confidence[field] != null && confidence[field] < LOW;
 
-  async function handleStart() {
+  function handleStart() {
+    // Scanning is one-shot (no draft needed) — go straight to document upload.
     setError(null);
-    const res = await startDraft(user?.id);
-    if (!res?.success) { setError(res?.error || "Could not start registration"); return; }
-    setDraftId(res.draftId);
     setManualMode(false);
     setPhase("upload");
   }
