@@ -49,11 +49,28 @@ import {
   getIssuerReports,
   submitReport,
 } from "@/lib/store";
-import {
-  startDraft,
-  uploadDraftDocuments,
-  processDraftExtraction,
-} from "@/app/actions/registration";
+import { scanDocument } from "@/app/actions/registration";
+
+// Downscale large images client-side so OCR is fast and within service limits.
+// Non-images (PDFs) are returned unchanged.
+async function downscaleImage(file, maxDim = 1600, quality = 0.85) {
+  if (!file || !/image\//i.test(file.type || "")) return file;
+  try {
+    const img = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    if (scale >= 1 && file.size < 900 * 1024) return file; // already small
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+    if (!blob) return file;
+    return new File([blob], (file.name || "scan").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
 
 const NAV_ITEMS = [
   { id: "overview",       label: "Overview",          icon: LayoutDashboard },
@@ -639,33 +656,24 @@ function ScanRegisterFlow({ user, onSuccess }) {
 
     setPhase("processing");
 
-    // Create a FRESH draft for every scan so a re-upload never reads a
-    // previously-uploaded document from a reused draft.
-    const fresh = await startDraft(user?.id);
-    if (!fresh?.success) { setError(fresh?.error || "Could not start"); setPhase("upload"); return; }
-    const freshId = fresh.draftId;
-    setDraftId(freshId);
+    // Downscale photos so OCR is fast and within the OCR service's limits.
+    let cert = files.certificateOfIncorporation;
+    try { cert = await downscaleImage(cert); } catch (_) { /* keep original */ }
 
     const fd = new FormData();
-    fd.append("draftId", freshId);
-    if (files.certificateOfIncorporation) fd.append("certificateOfIncorporation", files.certificateOfIncorporation);
-    if (files.financials) fd.append("financials", files.financials);
+    fd.append("file", cert);
 
-    const up = await uploadDraftDocuments(fd);
-    if (!up?.success) { setError(up?.error || "Upload failed"); setPhase("upload"); return; }
-
-    // Server-side extraction handles both PDFs (text) and images (OCR).
-    // Bound the wait AND catch any rejection (e.g. serverless function killed)
-    // so the UI can never hang — it always reaches the review/manual step.
+    // ONE server call: reads (PDF text or image OCR) + parses. No DB round-trip,
+    // so it can't hang on a large upload. Bounded + caught so the UI never sticks.
     const fallback = { success: true, extracted: {}, confidence: {}, missing: [], readable: false };
     let ex;
     try {
       ex = await Promise.race([
-        processDraftExtraction(freshId),
-        new Promise((resolve) => setTimeout(() => resolve(fallback), 45000)),
+        scanDocument(fd),
+        new Promise((resolve) => setTimeout(() => resolve(fallback), 40000)),
       ]);
     } catch (e) {
-      console.error("Extraction call failed:", e);
+      console.error("Scan call failed:", e);
       ex = fallback;
     }
     if (!ex?.success) { ex = fallback; }

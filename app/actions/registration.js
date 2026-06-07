@@ -4,7 +4,26 @@
 // Phase 2: draft lifecycle + document upload (extraction added in Phase 3).
 
 import { createDraft, addDraftDocument, setDraftStatus, getDraft } from "@/lib/registration";
-import { extractFromDraft, extractFromText } from "@/lib/extraction";
+import { extractFromDraft, extractFromText, scanBytes } from "@/lib/extraction";
+
+// One-shot scan: receives the file directly, reads + parses it, returns the
+// fields. No DB round-trips, so it can't hang on large uploads.
+export async function scanDocument(formData) {
+  try {
+    if (!formData || typeof formData.get !== "function") return { success: false, error: "Invalid form data" };
+    const file = formData.get("file");
+    if (!file || typeof file.arrayBuffer !== "function" || file.size === 0) {
+      return { success: false, error: "No file provided" };
+    }
+    if (file.size > 8 * 1024 * 1024) return { success: false, error: "File exceeds 8 MB" };
+    const mime = file.type || "";
+    const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    return await scanBytes(base64, mime);
+  } catch (err) {
+    console.error("[REG] scanDocument failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 
