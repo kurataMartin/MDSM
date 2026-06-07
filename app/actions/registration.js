@@ -4,7 +4,7 @@
 // Phase 2: draft lifecycle + document upload (extraction added in Phase 3).
 
 import { createDraft, addDraftDocument, setDraftStatus, getDraft } from "@/lib/registration";
-import { extractFromDraft } from "@/lib/extraction";
+import { extractFromDraft, extractFromText } from "@/lib/extraction";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
 
@@ -87,6 +87,18 @@ export async function processDraftExtraction(draftId) {
     return result;
   } catch (err) {
     console.error("[REG] processDraftExtraction failed:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Event 3b — extraction from OCR text (images are OCR'd client-side, then the
+// recognized text is parsed here). Keeps heavy OCR off the serverless function.
+export async function processDraftText(draftId, text) {
+  try {
+    if (!draftId) return { success: false, error: "Missing draftId" };
+    return await extractFromText(draftId, text || "");
+  } catch (err) {
+    console.error("[REG] processDraftText failed:", err.message);
     return { success: false, error: err.message };
   }
 }

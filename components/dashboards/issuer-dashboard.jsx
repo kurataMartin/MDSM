@@ -53,6 +53,7 @@ import {
   startDraft,
   uploadDraftDocuments,
   processDraftExtraction,
+  processDraftText,
 } from "@/app/actions/registration";
 
 const NAV_ITEMS = [
@@ -600,6 +601,7 @@ function ScanRegisterFlow({ user, onSuccess }) {
   const [missing, setMissing]   = useState([]);   // expected fields not found
   const [readable, setReadable] = useState(true);  // any text read from document
   const [preview, setPreview]   = useState(null); // { url, mime, name }
+  const [ocrProgress, setOcrProgress] = useState(0); // image OCR progress %
   const [form, setForm]         = useState({ name: "", symbol: "", type: "equity", sector: "", description: "", totalTokens: "", initialPrice: "" });
   const [error, setError]       = useState(null);
 
@@ -626,6 +628,7 @@ function ScanRegisterFlow({ user, onSuccess }) {
 
   async function handleScan() {
     setError(null);
+    setOcrProgress(0);
     if (!files.certificateOfIncorporation) { setError("Please attach the Certificate of Incorporation."); return; }
 
     // Build a local preview of the uploaded certificate (no server round-trip).
@@ -652,7 +655,28 @@ function ScanRegisterFlow({ user, onSuccess }) {
     const up = await uploadDraftDocuments(fd);
     if (!up?.success) { setError(up?.error || "Upload failed"); setPhase("upload"); return; }
 
-    const ex = await processDraftExtraction(freshId);
+    // Choose the extraction path by file type:
+    //  • PDF   → server-side text extraction (unpdf)
+    //  • image → client-side OCR (tesseract.js), then parse the text on the server
+    const cert = files.certificateOfIncorporation;
+    const isImage = /image\//i.test(cert.type || "") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(cert.name || "");
+
+    let ex;
+    if (isImage) {
+      try {
+        const Tesseract = (await import("tesseract.js")).default;
+        const { data } = await Tesseract.recognize(cert, "eng", {
+          logger: (m) => { if (m.status === "recognizing text") setOcrProgress(Math.round((m.progress || 0) * 100)); },
+        });
+        setOcrProgress(100);
+        ex = await processDraftText(freshId, data?.text || "");
+      } catch (ocrErr) {
+        console.error("OCR failed:", ocrErr);
+        ex = await processDraftText(freshId, ""); // treat as unreadable → manual entry
+      }
+    } else {
+      ex = await processDraftExtraction(freshId);
+    }
     if (!ex?.success) { setError(ex?.error || "Could not read the document"); setPhase("failed"); return; }
 
     const f = ex.extracted || {};
@@ -826,7 +850,11 @@ function ScanRegisterFlow({ user, onSuccess }) {
           <div className="mt-6 space-y-5">
             <div className="flex flex-col items-center gap-2 py-2">
               <p className="font-medium text-emerald-600">Scanning &amp; extracting…</p>
-              <p className="text-xs text-muted-foreground">Reading company details from your document</p>
+              <p className="text-xs text-muted-foreground">
+                {ocrProgress > 0 && ocrProgress < 100
+                  ? `Recognising text (OCR) — ${ocrProgress}%`
+                  : "Reading company details from your document"}
+              </p>
             </div>
             {renderPreview(true)}
           </div>
