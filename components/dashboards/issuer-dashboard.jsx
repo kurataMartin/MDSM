@@ -888,39 +888,25 @@ function ScanRegisterFlow({ user, onSuccess }) {
               </div>
             )}
 
-            {/* ── Extracted data: read-only summary card (no inputs) ── */}
-            {!manualMode && locked.size > 0 && (
+            {/* ── Extracted data: read-only summary card — every extracted field ── */}
+            {!manualMode && Object.keys(extracted).length > 0 && (
               <div className="rounded-xl border-2 border-emerald-500 bg-emerald-950 p-4 space-y-3">
                 <p className="flex items-center gap-2 text-sm font-bold text-emerald-300">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  Company Details
-                  <span className="text-xs font-normal text-emerald-400">(from document — cannot be edited)</span>
+                  Extracted from Document
+                  <span className="text-xs font-normal text-emerald-400">(cannot be edited)</span>
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {locked.has("name") && (
+                  {extracted.company_name && (
                     <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Company Name</p>
-                      <p className="mt-1 text-sm font-bold text-white">{form.name}</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.company_name}</p>
                     </div>
                   )}
-                  {locked.has("sector") && (
+                  {extracted.company_type && (
                     <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Sector / Company Type</p>
-                      <p className="mt-1 text-sm font-bold text-white">{form.sector}</p>
-                    </div>
-                  )}
-                  {locked.has("totalTokens") && (
-                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Total Shares</p>
-                      <p className="mt-1 text-sm font-bold text-white">{Number(form.totalTokens).toLocaleString()}</p>
-                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ from share capital</p>
-                    </div>
-                  )}
-                  {locked.has("initialPrice") && (
-                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Initial Price</p>
-                      <p className="mt-1 text-sm font-bold text-white">M{Number(form.initialPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ calculated from share capital</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Company Type</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.company_type}</p>
                     </div>
                   )}
                   {extracted.registration_number && (
@@ -935,6 +921,26 @@ function ScanRegisterFlow({ user, onSuccess }) {
                       <p className="mt-1 text-sm font-bold text-white">{extracted.incorporation_date}</p>
                     </div>
                   )}
+                  {extracted.authorized_shares != null && (
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Total Shares</p>
+                      <p className="mt-1 text-sm font-bold text-white">{Number(extracted.authorized_shares).toLocaleString()}</p>
+                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ from share capital</p>
+                    </div>
+                  )}
+                  {extracted.price_per_share != null && (
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Initial Price</p>
+                      <p className="mt-1 text-sm font-bold text-white">M{Number(extracted.price_per_share).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
+                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ capital ÷ shares</p>
+                    </div>
+                  )}
+                  {extracted.share_capital && (
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Share Capital (as stated)</p>
+                      <p className="mt-1 text-sm font-mono font-bold text-white">{extracted.share_capital}</p>
+                    </div>
+                  )}
                   {extracted.directors && (
                     <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Directors</p>
@@ -947,10 +953,10 @@ function ScanRegisterFlow({ user, onSuccess }) {
                       <p className="mt-1 text-sm font-bold text-white">{extracted.registered_address}</p>
                     </div>
                   )}
-                  {extracted.share_capital && (
+                  {extracted.contact_email && (
                     <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Share Capital (as stated)</p>
-                      <p className="mt-1 text-sm font-mono font-bold text-white">{extracted.share_capital}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Contact Email</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.contact_email}</p>
                     </div>
                   )}
                 </div>
