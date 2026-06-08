@@ -621,9 +621,6 @@ function ScanRegisterFlow({ user, onSuccess }) {
   const [form, setForm]         = useState({ name: "", symbol: "", type: "equity", sector: "", description: "", totalTokens: "", initialPrice: "" });
   const [error, setError]       = useState(null);
 
-  const LOW = 0.8;
-  const isLow = (field) => confidence[field] != null && confidence[field] < LOW;
-
   function handleStart() {
     // Scanning is one-shot (no draft needed) — go straight to document upload.
     setError(null);
@@ -730,9 +727,6 @@ function ScanRegisterFlow({ user, onSuccess }) {
       setPhase("review");
     }
   }
-
-  const fieldClass = (field, formKey) =>
-    `mt-1.5 ${isLow(field) ? "border-amber-400 ring-1 ring-amber-400/40 bg-amber-50/40" : ""} ${locked.has(formKey) ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}`;
 
   const FIELD_LABELS = {
     company_name: "Company Name", registration_number: "Registration No.",
@@ -878,7 +872,7 @@ function ScanRegisterFlow({ user, onSuccess }) {
               <div className="flex items-start gap-2 rounded-lg border border-red-300/50 bg-red-50/60 p-3 text-xs text-red-800">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>
-                  We couldn’t read any text from this document (it may be a scanned image or a
+                  We couldn&apos;t read any text from this document (it may be a scanned image or a
                   protected PDF). Nothing was auto-filled — please enter the details manually below.
                 </span>
               </div>
@@ -894,44 +888,82 @@ function ScanRegisterFlow({ user, onSuccess }) {
               </div>
             )}
 
-            {/* Highlighted extracted information */}
-            {!manualMode && Object.keys(extracted).length > 0 && (
-              <div className="rounded-lg border bg-card p-3">
-                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                  Extracted Information
-                  <span className="text-muted-foreground font-normal">({Object.keys(extracted).length} fields)</span>
+            {/* ── Extracted data: read-only summary card (no inputs) ── */}
+            {!manualMode && locked.size > 0 && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-3">
+                <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Company Details <span className="text-xs font-normal text-emerald-600">(from document — cannot be edited)</span>
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {Object.entries(extracted).map(([k, v]) => (
-                    <div key={k}
-                      className={`animate-in fade-in slide-in-from-bottom-1 rounded-md border px-3 py-2 text-xs
-                        ${isLow(k) ? "border-amber-300 bg-amber-50/60" : "border-emerald-200 bg-emerald-50/40"}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">{FIELD_LABELS[k] || k}</span>
-                        <span className={`shrink-0 font-medium ${isLow(k) ? "text-amber-600" : "text-emerald-600"}`}>
-                          {isLow(k) ? "verify" : `${Math.round((confidence[k] || 0) * 100)}%`}
-                        </span>
-                      </div>
-                      <div className="truncate font-medium text-foreground">{String(v)}</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {locked.has("name") && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Company Name</p>
+                      <p className="mt-0.5 text-sm font-semibold text-foreground">{form.name}</p>
                     </div>
-                  ))}
+                  )}
+                  {locked.has("sector") && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Sector / Company Type</p>
+                      <p className="mt-0.5 text-sm font-semibold text-foreground">{form.sector}</p>
+                    </div>
+                  )}
+                  {locked.has("totalTokens") && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Shares</p>
+                      <p className="mt-0.5 text-sm font-semibold text-foreground">{Number(form.totalTokens).toLocaleString()}</p>
+                      <p className="text-[10px] text-emerald-600 mt-0.5">From share capital</p>
+                    </div>
+                  )}
+                  {locked.has("initialPrice") && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Initial Price</p>
+                      <p className="mt-0.5 text-sm font-semibold text-foreground">M{Number(form.initialPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-[10px] text-emerald-600 mt-0.5">Calculated from share capital</p>
+                    </div>
+                  )}
+                  {extracted.registration_number && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Registration No.</p>
+                      <p className="mt-0.5 text-sm font-mono font-semibold text-foreground">{extracted.registration_number}</p>
+                    </div>
+                  )}
+                  {extracted.incorporation_date && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Incorporation Date</p>
+                      <p className="mt-0.5 text-sm font-semibold text-foreground">{extracted.incorporation_date}</p>
+                    </div>
+                  )}
+                  {extracted.directors && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Directors</p>
+                      <p className="mt-0.5 text-sm font-semibold text-foreground">{extracted.directors}</p>
+                    </div>
+                  )}
+                  {extracted.registered_address && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Registered Address</p>
+                      <p className="mt-0.5 text-sm font-semibold text-foreground">{extracted.registered_address}</p>
+                    </div>
+                  )}
+                  {extracted.share_capital && (
+                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Share Capital (as stated)</p>
+                      <p className="mt-0.5 text-sm font-mono font-semibold text-foreground">{extracted.share_capital}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            {!manualMode && Object.values(confidence).some((c) => c < 0.8) && (
-              <div className="rounded-lg border border-amber-300/40 bg-amber-50/40 p-3 text-xs text-amber-800">
-                Fields highlighted in <span className="font-semibold">amber</span> were read with low confidence — please verify them.
-              </div>
-            )}
-
+            {/* ── Editable fields: only fields NOT extracted ── */}
             <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <Label>Company Name <span className="text-red-500">*</span></Label>
-                <Input value={form.name} readOnly={locked.has("name")} onChange={(e) => upd("name", e.target.value)} className={fieldClass("company_name", "name")} maxLength={120} />
-                {locked.has("name") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Extracted from document</p>}
-              </div>
+              {!locked.has("name") && (
+                <div>
+                  <Label>Company Name <span className="text-red-500">*</span></Label>
+                  <Input value={form.name} onChange={(e) => upd("name", e.target.value)} className="mt-1.5" maxLength={120} />
+                </div>
+              )}
               <div>
                 <Label>Ticker Symbol <span className="text-red-500">*</span></Label>
                 <Input value={form.symbol} onChange={(e) => upd("symbol", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))} className="mt-1.5" />
@@ -946,44 +978,35 @@ function ScanRegisterFlow({ user, onSuccess }) {
                   <option value="debt">Debt Security</option>
                 </select>
               </div>
-              <div>
-                <Label>Sector / Company Type</Label>
-                <Input value={form.sector} readOnly={locked.has("sector")} onChange={(e) => upd("sector", e.target.value)} className={fieldClass("company_type", "sector")} />
-                {locked.has("sector") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Extracted from document</p>}
-              </div>
-              <div>
-                <Label>Total Shares <span className="text-red-500">*</span></Label>
-                <Input type="number" min="1" step="1" value={form.totalTokens} readOnly={locked.has("totalTokens")}
-                  onChange={(e) => upd("totalTokens", e.target.value)}
-                  placeholder="e.g. 1000000" className={fieldClass(null, "totalTokens")} />
-                {locked.has("totalTokens") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> From share capital</p>}
-              </div>
-              <div>
-                <Label>Initial Price (M) <span className="text-red-500">*</span></Label>
-                <Input type="number" min="0" step="0.01" value={form.initialPrice} readOnly={locked.has("initialPrice")}
-                  onChange={(e) => upd("initialPrice", e.target.value)}
-                  placeholder="e.g. 25.00" className={fieldClass(null, "initialPrice")} />
-                {locked.has("initialPrice") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Calculated from share capital</p>}
-              </div>
+              {!locked.has("sector") && (
+                <div>
+                  <Label>Sector / Company Type</Label>
+                  <Input value={form.sector} onChange={(e) => upd("sector", e.target.value)} className="mt-1.5" />
+                </div>
+              )}
+              {!locked.has("totalTokens") && (
+                <div>
+                  <Label>Total Shares <span className="text-red-500">*</span></Label>
+                  <Input type="number" min="1" step="1" value={form.totalTokens}
+                    onChange={(e) => upd("totalTokens", e.target.value)}
+                    placeholder="e.g. 1000000" className="mt-1.5" />
+                </div>
+              )}
+              {!locked.has("initialPrice") && (
+                <div>
+                  <Label>Initial Price (M) <span className="text-red-500">*</span></Label>
+                  <Input type="number" min="0" step="0.01" value={form.initialPrice}
+                    onChange={(e) => upd("initialPrice", e.target.value)}
+                    placeholder="e.g. 25.00" className="mt-1.5" />
+                </div>
+              )}
             </div>
 
             <div>
               <Label>Description</Label>
               <textarea value={form.description} onChange={(e) => upd("description", e.target.value)} rows={3} maxLength={1000}
-                className={`w-full rounded-md border bg-background px-3 py-2 text-sm ${isLow("directors") ? "border-amber-400 ring-1 ring-amber-400/40" : "mt-1.5"}`} />
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm mt-1.5" />
             </div>
-
-            {/* Extracted reference details (read-only) */}
-            {(extracted.registration_number || extracted.incorporation_date) && (
-              <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-                {extracted.registration_number && (
-                  <div className={isLow("registration_number") ? "text-amber-700" : ""}>
-                    Reg. number: <span className="font-mono">{extracted.registration_number}</span>{isLow("registration_number") && " — verify"}
-                  </div>
-                )}
-                {extracted.incorporation_date && <div>Incorporated: {extracted.incorporation_date}</div>}
-              </div>
-            )}
 
             <Button type="submit" className="w-full gap-2"><Send className="h-4 w-4" /> Submit for Public Listing</Button>
           </form>
