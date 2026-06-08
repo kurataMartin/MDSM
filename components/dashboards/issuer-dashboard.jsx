@@ -615,6 +615,7 @@ function ScanRegisterFlow({ user, onSuccess }) {
   const [confidence, setConfidence] = useState({});
   const [missing, setMissing]   = useState([]);   // expected fields not found
   const [readable, setReadable] = useState(true);  // any text read from document
+  const [locked, setLocked]     = useState(() => new Set()); // auto-filled fields (read-only)
   const [preview, setPreview]   = useState(null); // { url, mime, name }
   const [ocrProgress, setOcrProgress] = useState(0); // image OCR progress %
   const [form, setForm]         = useState({ name: "", symbol: "", type: "equity", sector: "", description: "", totalTokens: "", initialPrice: "" });
@@ -693,10 +694,16 @@ function ScanRegisterFlow({ user, onSuccess }) {
       totalTokens:  f.authorized_shares != null ? String(f.authorized_shares) : "",
       initialPrice: f.price_per_share != null ? String(f.price_per_share) : "",
     });
+    const autoLocked = new Set();
+    if (f.company_name)              autoLocked.add("name");
+    if (f.company_type)              autoLocked.add("sector");
+    if (f.authorized_shares != null) autoLocked.add("totalTokens");
+    if (f.price_per_share != null)   autoLocked.add("initialPrice");
+    setLocked(autoLocked);
     setPhase("review");
   }
 
-  const upd = (k, v) => { setForm((p) => ({ ...p, [k]: v })); setError(null); };
+  const upd = (k, v) => { if (locked.has(k)) return; setForm((p) => ({ ...p, [k]: v })); setError(null); };
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -724,8 +731,8 @@ function ScanRegisterFlow({ user, onSuccess }) {
     }
   }
 
-  const fieldClass = (field) =>
-    `mt-1.5 ${isLow(field) ? "border-amber-400 ring-1 ring-amber-400/40 bg-amber-50/40" : ""}`;
+  const fieldClass = (field, formKey) =>
+    `mt-1.5 ${isLow(field) ? "border-amber-400 ring-1 ring-amber-400/40 bg-amber-50/40" : ""} ${locked.has(formKey) ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}`;
 
   const FIELD_LABELS = {
     company_name: "Company Name", registration_number: "Registration No.",
@@ -922,7 +929,8 @@ function ScanRegisterFlow({ user, onSuccess }) {
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
                 <Label>Company Name <span className="text-red-500">*</span></Label>
-                <Input value={form.name} onChange={(e) => upd("name", e.target.value)} className={fieldClass("company_name")} maxLength={120} />
+                <Input value={form.name} readOnly={locked.has("name")} onChange={(e) => upd("name", e.target.value)} className={fieldClass("company_name", "name")} maxLength={120} />
+                {locked.has("name") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Extracted from document</p>}
               </div>
               <div>
                 <Label>Ticker Symbol <span className="text-red-500">*</span></Label>
@@ -940,17 +948,22 @@ function ScanRegisterFlow({ user, onSuccess }) {
               </div>
               <div>
                 <Label>Sector / Company Type</Label>
-                <Input value={form.sector} onChange={(e) => upd("sector", e.target.value)} className={fieldClass("company_type")} />
+                <Input value={form.sector} readOnly={locked.has("sector")} onChange={(e) => upd("sector", e.target.value)} className={fieldClass("company_type", "sector")} />
+                {locked.has("sector") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Extracted from document</p>}
               </div>
               <div>
                 <Label>Total Shares <span className="text-red-500">*</span></Label>
-                <Input type="number" min="1" step="1" value={form.totalTokens} onChange={(e) => upd("totalTokens", e.target.value)}
-                  placeholder="e.g. 1000000" className="mt-1.5" />
+                <Input type="number" min="1" step="1" value={form.totalTokens} readOnly={locked.has("totalTokens")}
+                  onChange={(e) => upd("totalTokens", e.target.value)}
+                  placeholder="e.g. 1000000" className={fieldClass(null, "totalTokens")} />
+                {locked.has("totalTokens") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> From share capital</p>}
               </div>
               <div>
                 <Label>Initial Price (M) <span className="text-red-500">*</span></Label>
-                <Input type="number" min="0" step="0.01" value={form.initialPrice} onChange={(e) => upd("initialPrice", e.target.value)}
-                  placeholder="e.g. 25.00" className="mt-1.5" />
+                <Input type="number" min="0" step="0.01" value={form.initialPrice} readOnly={locked.has("initialPrice")}
+                  onChange={(e) => upd("initialPrice", e.target.value)}
+                  placeholder="e.g. 25.00" className={fieldClass(null, "initialPrice")} />
+                {locked.has("initialPrice") && <p className="mt-0.5 text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Calculated from share capital</p>}
               </div>
             </div>
 
