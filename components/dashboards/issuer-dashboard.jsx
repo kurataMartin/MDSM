@@ -681,12 +681,13 @@ function ScanRegisterFlow({ user, onSuccess }) {
     // Pre-fill ONLY from fields actually found — never fabricate.
     const suggestedSymbol = (f.company_name || "")
       .replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 5) || "";
+    const descParts = [f.company_type, f.registered_address, f.directors ? `Directors: ${f.directors}` : null].filter(Boolean);
     setForm({
       name:         f.company_name || "",
       symbol:       suggestedSymbol,
       type:         "equity",
       sector:       f.company_type || "",
-      description:  f.company_type || "",
+      description:  descParts.join(" · "),
       totalTokens:  f.authorized_shares != null ? String(f.authorized_shares) : "",
       initialPrice: f.price_per_share != null ? String(f.price_per_share) : "",
     });
@@ -728,11 +729,11 @@ function ScanRegisterFlow({ user, onSuccess }) {
   }
 
   const FIELD_LABELS = {
-    company_name:     "Company Name",
-    company_type:     "Sector / Company Type",
-    authorized_shares: "Total Shares",
-    price_per_share:  "Initial Price",
-    share_capital:    "Share Capital",
+    company_name: "Company Name", registration_number: "Registration No.",
+    incorporation_date: "Incorporation Date", company_type: "Company Type",
+    registered_address: "Registered Address", directors: "Directors",
+    authorized_shares: "Authorised Shares", price_per_share: "Price / Share",
+    share_capital: "Share Capital", contact_email: "Contact Email",
   };
 
   function renderPreview(scanning = false) {
@@ -892,7 +893,7 @@ function ScanRegisterFlow({ user, onSuccess }) {
               <div className="rounded-xl border-2 border-emerald-500 bg-emerald-950 p-4 space-y-3">
                 <p className="flex items-center gap-2 text-sm font-bold text-emerald-300">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  Listing Details
+                  Company Details
                   <span className="text-xs font-normal text-emerald-400">(from document — cannot be edited)</span>
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -919,12 +920,36 @@ function ScanRegisterFlow({ user, onSuccess }) {
                     <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Initial Price</p>
                       <p className="mt-1 text-sm font-bold text-white">M{Number(form.initialPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ capital ÷ shares</p>
+                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ calculated from share capital</p>
+                    </div>
+                  )}
+                  {extracted.registration_number && (
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Registration No.</p>
+                      <p className="mt-1 text-sm font-mono font-bold text-white">{extracted.registration_number}</p>
+                    </div>
+                  )}
+                  {extracted.incorporation_date && (
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Incorporation Date</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.incorporation_date}</p>
+                    </div>
+                  )}
+                  {extracted.directors && (
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Directors</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.directors}</p>
+                    </div>
+                  )}
+                  {extracted.registered_address && (
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Registered Address</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.registered_address}</p>
                     </div>
                   )}
                   {extracted.share_capital && (
                     <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Share Capital (as stated on document)</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Share Capital (as stated)</p>
                       <p className="mt-1 text-sm font-mono font-bold text-white">{extracted.share_capital}</p>
                     </div>
                   )}
