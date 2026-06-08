@@ -690,8 +690,8 @@ function ScanRegisterFlow({ user, onSuccess }) {
       type:         "equity",
       sector:       f.company_type || "",
       description:  descParts.join(" · "),
-      totalTokens:  "",
-      initialPrice: "",
+      totalTokens:  f.authorized_shares != null ? String(f.authorized_shares) : "",
+      initialPrice: f.price_per_share != null ? String(f.price_per_share) : "",
     });
     setPhase("review");
   }
@@ -731,8 +731,8 @@ function ScanRegisterFlow({ user, onSuccess }) {
     company_name: "Company Name", registration_number: "Registration No.",
     incorporation_date: "Incorporation Date", company_type: "Company Type",
     registered_address: "Registered Address", directors: "Directors",
-    authorized_shares: "Authorised Shares", share_capital: "Share Capital",
-    contact_email: "Contact Email",
+    authorized_shares: "Authorised Shares", price_per_share: "Price / Share",
+    share_capital: "Share Capital", contact_email: "Contact Email",
   };
 
   function renderPreview(scanning = false) {
