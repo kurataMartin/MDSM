@@ -890,66 +890,67 @@ function ScanRegisterFlow({ user, onSuccess }) {
 
             {/* ── Extracted data: read-only summary card (no inputs) ── */}
             {!manualMode && locked.size > 0 && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-3">
-                <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Company Details <span className="text-xs font-normal text-emerald-600">(from document — cannot be edited)</span>
+              <div className="rounded-xl border-2 border-emerald-500 bg-emerald-950 p-4 space-y-3">
+                <p className="flex items-center gap-2 text-sm font-bold text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  Company Details
+                  <span className="text-xs font-normal text-emerald-400">(from document — cannot be edited)</span>
                 </p>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {locked.has("name") && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Company Name</p>
-                      <p className="mt-0.5 text-sm font-semibold text-foreground">{form.name}</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Company Name</p>
+                      <p className="mt-1 text-sm font-bold text-white">{form.name}</p>
                     </div>
                   )}
                   {locked.has("sector") && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Sector / Company Type</p>
-                      <p className="mt-0.5 text-sm font-semibold text-foreground">{form.sector}</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Sector / Company Type</p>
+                      <p className="mt-1 text-sm font-bold text-white">{form.sector}</p>
                     </div>
                   )}
                   {locked.has("totalTokens") && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Shares</p>
-                      <p className="mt-0.5 text-sm font-semibold text-foreground">{Number(form.totalTokens).toLocaleString()}</p>
-                      <p className="text-[10px] text-emerald-600 mt-0.5">From share capital</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Total Shares</p>
+                      <p className="mt-1 text-sm font-bold text-white">{Number(form.totalTokens).toLocaleString()}</p>
+                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ from share capital</p>
                     </div>
                   )}
                   {locked.has("initialPrice") && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Initial Price</p>
-                      <p className="mt-0.5 text-sm font-semibold text-foreground">M{Number(form.initialPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      <p className="text-[10px] text-emerald-600 mt-0.5">Calculated from share capital</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Initial Price</p>
+                      <p className="mt-1 text-sm font-bold text-white">M{Number(form.initialPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-[10px] font-medium text-emerald-400 mt-0.5">↳ calculated from share capital</p>
                     </div>
                   )}
                   {extracted.registration_number && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Registration No.</p>
-                      <p className="mt-0.5 text-sm font-mono font-semibold text-foreground">{extracted.registration_number}</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Registration No.</p>
+                      <p className="mt-1 text-sm font-mono font-bold text-white">{extracted.registration_number}</p>
                     </div>
                   )}
                   {extracted.incorporation_date && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Incorporation Date</p>
-                      <p className="mt-0.5 text-sm font-semibold text-foreground">{extracted.incorporation_date}</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Incorporation Date</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.incorporation_date}</p>
                     </div>
                   )}
                   {extracted.directors && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 sm:col-span-2">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Directors</p>
-                      <p className="mt-0.5 text-sm font-semibold text-foreground">{extracted.directors}</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Directors</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.directors}</p>
                     </div>
                   )}
                   {extracted.registered_address && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 sm:col-span-2">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Registered Address</p>
-                      <p className="mt-0.5 text-sm font-semibold text-foreground">{extracted.registered_address}</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Registered Address</p>
+                      <p className="mt-1 text-sm font-bold text-white">{extracted.registered_address}</p>
                     </div>
                   )}
                   {extracted.share_capital && (
-                    <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5 sm:col-span-2">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Share Capital (as stated)</p>
-                      <p className="mt-0.5 text-sm font-mono font-semibold text-foreground">{extracted.share_capital}</p>
+                    <div className="rounded-lg border border-emerald-700 bg-emerald-900 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Share Capital (as stated)</p>
+                      <p className="mt-1 text-sm font-mono font-bold text-white">{extracted.share_capital}</p>
                     </div>
                   )}
                 </div>
